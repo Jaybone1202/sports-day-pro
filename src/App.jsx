@@ -2582,13 +2582,15 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       }
     } catch (err) { console.error(err); showToast('Failed to save results. Check database schema.', 'error'); return; } finally { setIsSaving(false); }
 
+    // Clear scores after save so unsaved-warning doesn't fire on back
+    setScores({});
+
     // Advance to next heat automatically
     if (heatSize !== 'All') {
       setSavedHeats(prev => new Set([...prev, activeHeat]));
       const nextHeat = activeHeat + 1;
       if (groupedRoster[nextHeat]) {
         setActiveHeat(nextHeat);
-        setScores({});
         setTimerSeconds(timerPreset);
         setTimerRunning(true);
       }
