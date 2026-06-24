@@ -2362,36 +2362,66 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
               })()}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {assignedActivities.map(activity => {
-                  const record     = schoolRecords.find(r =>
+                  const record      = schoolRecords.find(r =>
                     normalizeString(r.activity_name) === normalizeString(activity.name.split(' ')[0].trim()) &&
                     normalizeString(r.age_group)     === normalizeString(activity.age_group) &&
                     normalizeString(r.gender)        === normalizeString(activity.gender)
                   );
-                  const resultCount = resultCounts[activity.id] || 0;
-                  const isDone      = resultCount > 0;
+                  const resultCount   = resultCounts[activity.id] || 0;
+                  const isDone        = resultCount > 0;
+                  const evtMeta       = allEvents.find(e => e.id === selectedEventId);
+                  const eventLocked   = evtMeta?.is_locked ?? false;
+                  const actLocked     = activity.is_locked ?? false;
+                  const isLocked      = eventLocked || actLocked;
+
+                  const handleLockActivity = async (e) => {
+                    e.stopPropagation();
+                    const next = !actLocked;
+                    setAssignedActivities(prev => prev.map(a => a.id === activity.id ? { ...a, is_locked: next } : a));
+                    await supabase.from('event_activities').update({ is_locked: next }).eq('id', activity.id);
+                    showToast(next ? 'Activity locked' : 'Activity unlocked');
+                  };
+
                   return (
                     <div key={activity.id}
-                      onClick={() => { const evtMeta = allEvents.find(e => e.id === selectedEventId); onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked: evtMeta?.is_locked ?? false }); }}
-                      className={`rounded-xl shadow-sm border p-5 cursor-pointer hover:shadow-md transition-all group relative overflow-hidden flex flex-col justify-between ${isDone ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-sky-400'}`}>
-                      <div className={`absolute top-0 left-0 w-1 h-full ${isDone ? 'bg-emerald-500' : activity.activity_type === 'track' ? 'bg-sky-500' : activity.activity_type === 'field' ? 'bg-amber-500' : 'bg-purple-500'}`}/>
+                      onClick={() => !isLocked && onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked })}
+                      className={`rounded-xl shadow-sm border p-5 transition-all group relative overflow-hidden flex flex-col justify-between
+                        ${isLocked ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-300 dark:border-slate-600 cursor-default opacity-75' :
+                          isDone ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 cursor-pointer hover:shadow-md' :
+                          'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-md hover:border-sky-400'}`}>
+                      <div className={`absolute top-0 left-0 w-1 h-full ${isLocked ? 'bg-slate-400' : isDone ? 'bg-emerald-500' : activity.activity_type === 'track' ? 'bg-sky-500' : activity.activity_type === 'field' ? 'bg-amber-500' : 'bg-purple-500'}`}/>
                       <div>
                         <div className="flex justify-between items-start mb-3 pl-2">
                           <span className="px-2 py-1 rounded text-xs font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{activity.activity_type.replace('_', ' ')}</span>
                           <div className="flex items-center gap-1.5">
-                            {isDone && (
+                            {isDone && !isLocked && (
                               <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-0.5 rounded-full">
                                 <CheckCircle2 size={11}/> {resultCount} results
+                              </span>
+                            )}
+                            {isLocked && (
+                              <span className="flex items-center gap-1 text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-full">
+                                <Lock size={10}/> {eventLocked ? 'Event locked' : 'Locked'}
                               </span>
                             )}
                             <span className="text-xs font-bold bg-slate-800 dark:bg-slate-600 text-white px-2 py-1 rounded">{activity.age_group}</span>
                           </div>
                         </div>
-                        <h3 className={`text-lg font-bold pl-2 transition-colors ${isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-900 dark:text-white group-hover:text-sky-600'}`}>{activity.name}</h3>
+                        <h3 className={`text-lg font-bold pl-2 transition-colors ${isLocked ? 'text-slate-500 dark:text-slate-400' : isDone ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-900 dark:text-white group-hover:text-sky-600'}`}>{activity.name}</h3>
                         <div className="flex items-center gap-1 mt-1 pl-2 text-slate-400 text-xs font-medium"><Users size={12}/> Top {activity.participants_per_house || 2} / House</div>
                       </div>
                       <div className="mt-3 pl-2 border-t border-slate-100 dark:border-slate-700 pt-3 flex items-center justify-between">
                         <span className={`text-sm font-semibold ${activity.gender === 'Boys' ? 'text-sky-600' : activity.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}`}>{activity.gender}</span>
-                        {record && <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded truncate max-w-[120px]"><Medal size={10} className="shrink-0"/> {record.record_value}{activity.activity_type==='track'?'s':'m'}</div>}
+                        <div className="flex items-center gap-2">
+                          {record && !isLocked && <div className="flex items-center gap-1 text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded truncate max-w-[100px]"><Medal size={10} className="shrink-0"/> {record.record_value}{activity.activity_type==='track'?'s':'m'}</div>}
+                          {!eventLocked && (
+                            <button onClick={handleLockActivity}
+                              className={`p-1.5 rounded-lg transition-colors ${actLocked ? 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100' : 'text-slate-300 hover:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                              title={actLocked ? 'Unlock activity' : 'Lock activity'}>
+                              {actLocked ? <Lock size={14}/> : <Unlock size={14}/>}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
