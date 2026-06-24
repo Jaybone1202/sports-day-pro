@@ -4628,7 +4628,7 @@ export default function App() {
           <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
             <div className="p-5 border-b border-slate-200">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-sky-500 rounded-xl"><Trophy size={18} className="text-white"/></div>
+                <div className="p-1.5 bg-sky-500 rounded-xl"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 2.5h9v7Q13.5 13 9 13Q4.5 13 4.5 9.5Z"/><path d="M4.5 5Q2 5 2 7.5Q2 10.5 4.5 10.5"/><path d="M13.5 5Q16 5 16 7.5Q16 10.5 13.5 10.5"/><line x1="9" y1="13" x2="9" y2="15.5"/><line x1="5.5" y1="15.5" x2="12.5" y2="15.5"/><path d="M9 5.5l.6 1.8h1.9l-1.5 1.1.6 1.8L9 9.2l-1.6 1 .6-1.8-1.5-1.1h1.9Z" fill="white" stroke="none"/></svg></div>
                 <span className="font-bold text-slate-800 text-base tracking-tight">SportsDay Pro</span>
               </div>
             </div>
@@ -4660,7 +4660,7 @@ export default function App() {
               <div className="absolute inset-0 bg-black/40"/>
               <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white dark:bg-slate-800 flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
                 <div className="p-5 border-b border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2"><div className="p-1.5 bg-sky-500 rounded-xl"><Trophy size={16} className="text-white"/></div><span className="font-bold text-slate-800">SportsDay Pro</span></div>
+                  <div className="flex items-center gap-2"><div className="p-1.5 bg-sky-500 rounded-xl"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 2.5h9v7Q13.5 13 9 13Q4.5 13 4.5 9.5Z"/><path d="M4.5 5Q2 5 2 7.5Q2 10.5 4.5 10.5"/><path d="M13.5 5Q16 5 16 7.5Q16 10.5 13.5 10.5"/><line x1="9" y1="13" x2="9" y2="15.5"/><line x1="5.5" y1="15.5" x2="12.5" y2="15.5"/><path d="M9 5.5l.6 1.8h1.9l-1.5 1.1.6 1.8L9 9.2l-1.6 1 .6-1.8-1.5-1.1h1.9Z" fill="white" stroke="none"/></svg></div><span className="font-bold text-slate-800">SportsDay Pro</span></div>
                   <button onClick={() => setMobileNavOpen(false)} className="text-slate-400 hover:text-slate-700 p-1"><X size={20}/></button>
                 </div>
                 <nav className="flex-1 p-3 space-y-1">
@@ -4677,7 +4677,7 @@ export default function App() {
           <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-sky-500 rounded-xl"><Trophy size={18} className="text-white"/></div>
+                <div className="p-1.5 bg-sky-500 rounded-xl"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 2.5h9v7Q13.5 13 9 13Q4.5 13 4.5 9.5Z"/><path d="M4.5 5Q2 5 2 7.5Q2 10.5 4.5 10.5"/><path d="M13.5 5Q16 5 16 7.5Q16 10.5 13.5 10.5"/><line x1="9" y1="13" x2="9" y2="15.5"/><line x1="5.5" y1="15.5" x2="12.5" y2="15.5"/><path d="M9 5.5l.6 1.8h1.9l-1.5 1.1.6 1.8L9 9.2l-1.6 1 .6-1.8-1.5-1.1h1.9Z" fill="white" stroke="none"/></svg></div>
                 <span className="font-bold text-slate-800 dark:text-white text-base tracking-tight">SportsDay Pro</span>
               </div>
               <div className="mt-1.5 text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-semibold">{user.role} Portal</div>
@@ -4726,7 +4726,7 @@ export default function App() {
           <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700">
               <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-sky-500 rounded-xl"><Trophy size={18} className="text-white"/></div>
+                <div className="p-1.5 bg-sky-500 rounded-xl"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 2.5h9v7Q13.5 13 9 13Q4.5 13 4.5 9.5Z"/><path d="M4.5 5Q2 5 2 7.5Q2 10.5 4.5 10.5"/><path d="M13.5 5Q16 5 16 7.5Q16 10.5 13.5 10.5"/><line x1="9" y1="13" x2="9" y2="15.5"/><line x1="5.5" y1="15.5" x2="12.5" y2="15.5"/><path d="M9 5.5l.6 1.8h1.9l-1.5 1.1.6 1.8L9 9.2l-1.6 1 .6-1.8-1.5-1.1h1.9Z" fill="white" stroke="none"/></svg></div>
                 <span className="font-bold text-slate-800 dark:text-white text-base tracking-tight">SportsDay Pro</span>
               </div>
               <div className="mt-1.5 text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-semibold">{user.role} Portal</div>
