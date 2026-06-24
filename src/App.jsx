@@ -1640,15 +1640,84 @@ const LiveStandingsModule = ({ user }) => {
         </div>
       </div>
 
-      <div className="hidden print-header mb-8 pb-4 border-b-2 border-slate-800">
-        <h1 className="text-3xl font-bold">{events.find(e => e.id === selectedEventId)?.name || 'Sports Day Event'}</h1>
-        <p className="text-lg text-slate-600 mt-1">Official Final Results &amp; Standings</p>
+      {/* ── PRINT-ONLY REPORT ── */}
+      <div className="print-only">
+        {/* Cover header */}
+        <div style={{ borderBottom: '3px solid #0ea5e9', paddingBottom: '12px', marginBottom: '20px' }}>
+          <h1 style={{ fontSize: '26px', fontWeight: 900, margin: 0, color: '#0f172a' }}>{eventName}</h1>
+          <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
+            Official Results &amp; Standings · Printed {new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </p>
+        </div>
+
+        {/* House standings table */}
+        <div className="print-avoid-break" style={{ marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#475569', marginBottom: '8px' }}>Overall House Standings</h2>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ background: '#f1f5f9' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: '48px' }}>Pos</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>House</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#334155' }}>Points</th>
+              </tr>
+            </thead>
+            <tbody>
+              {standings.map((house, i) => (
+                <tr key={house.name} style={{ borderBottom: '1px solid #e2e8f0', background: i === 0 ? '#fefce8' : 'white' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: 700, color: i === 0 ? '#92400e' : '#64748b', fontSize: '16px' }}>{i + 1}</td>
+                  <td style={{ padding: '8px 12px', fontWeight: 600, color: '#0f172a' }}>{house.name}</td>
+                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 900, fontSize: '18px', color: '#0f172a' }}>{house.points} <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8' }}>pts</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Results grouped by activity */}
+        {(() => {
+          const grouped = {};
+          recentResults.forEach(r => {
+            if (!grouped[r.event]) grouped[r.event] = [];
+            grouped[r.event].push(r);
+          });
+          return Object.entries(grouped).map(([eventLabel, rows], gi) => (
+            <div key={eventLabel} className="print-avoid-break" style={{ marginBottom: '18px' }}>
+              <h3 style={{ fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#0ea5e9', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px', marginBottom: '6px' }}>{eventLabel}</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th style={{ padding: '5px 10px', textAlign: 'left', color: '#64748b', fontWeight: 600 }}>Student</th>
+                    <th style={{ padding: '5px 10px', textAlign: 'left', color: '#64748b', fontWeight: 600 }}>House</th>
+                    <th style={{ padding: '5px 10px', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>Pts</th>
+                    <th style={{ padding: '5px 10px', textAlign: 'right', color: '#64748b', fontWeight: 600 }}>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.sort((a, b) => b.points - a.points).map((r, ri) => (
+                    <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9', background: ri % 2 === 0 ? 'white' : '#f8fafc' }}>
+                      <td style={{ padding: '5px 10px', fontWeight: 500, color: '#0f172a' }}>{r.winner}</td>
+                      <td style={{ padding: '5px 10px', color: '#475569' }}>{r.house}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 700, color: '#2563eb' }}>+{r.points}</td>
+                      <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: r.isRecord ? '#b45309' : '#0f172a', fontFamily: 'monospace' }}>
+                        {r.isRecord ? '★ ' : ''}{r.metric}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ));
+        })()}
+
+        <div style={{ marginTop: '24px', borderTop: '1px solid #e2e8f0', paddingTop: '8px', fontSize: '10px', color: '#94a3b8', textAlign: 'center' }}>
+          Generated by SportsDay Pro · {new Date().toLocaleString()}
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-slate-400" size={32}/></div>
+        <div className="text-center py-12 screen-only"><Loader2 className="animate-spin mx-auto text-slate-400" size={32}/></div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start screen-only">
           <div className="lg:col-span-4 space-y-4 print-full-width">
             <h3 className="font-bold text-slate-900 dark:text-slate-200 uppercase tracking-widest text-sm flex items-center gap-2 mb-4"><Trophy size={16} className="text-amber-500"/> Overall Points</h3>
             {standings.length === 0 ? (
@@ -4135,11 +4204,20 @@ export default function App() {
       {/* FIX: Print styles injected directly so they work without a separate stylesheet */}
       <style>{`
         @media print {
-          .hide-on-print  { display: none !important; }
-          .print-header   { display: block !important; }
-          .print-full-width { width: 100% !important; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+          @page { size: A4 portrait; margin: 16mm 14mm; }
+          body { background: white !important; color: black !important; font-family: system-ui, sans-serif; }
+          .hide-on-print   { display: none !important; }
+          .print-header    { display: block !important; }
+          .print-only      { display: block !important; }
+          .screen-only     { display: none !important; }
+          .print-full-width { width: 100% !important; max-width: 100% !important; }
           .print-container { padding: 0 !important; }
+          aside, nav       { display: none !important; }
+          .print-page-break { page-break-before: always; }
+          .print-avoid-break { page-break-inside: avoid; }
         }
+        .print-only { display: none; }
       `}</style>
 
       <Toast toast={toastConfig}/>
