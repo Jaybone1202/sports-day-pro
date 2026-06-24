@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -2307,6 +2307,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [flagType, setFlagType]             = useState('issue');
   const [flagMessage, setFlagMessage]       = useState('');
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
+  const savedScoresRef = useRef({});
 
   useEffect(() => {
     if (isTrial) { setCurrentRecord(null); return; }
@@ -2398,6 +2399,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         if (existing && existing.length > 0) {
           const loaded = {};
           existing.forEach(r => { loaded[r.student_id] = r.result_value; });
+          savedScoresRef.current = loaded;
           if (!isRefresh) setScores(loaded);
           else setScores(prev => ({ ...loaded, ...prev }));
         }
@@ -2582,8 +2584,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       }
     } catch (err) { console.error(err); showToast('Failed to save results. Check database schema.', 'error'); return; } finally { setIsSaving(false); }
 
-    // Clear scores after save so unsaved-warning doesn't fire on back
-    setScores({});
+    // Mark all current scores as saved so unsaved-warning doesn't fire on back
+    savedScoresRef.current = { ...savedScoresRef.current, ...scores };
 
     // Advance to next heat automatically
     if (heatSize !== 'All') {
@@ -2612,7 +2614,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   };
 
   const handleClose = () => {
-    const hasUnsaved = Object.values(scores).some(v => v !== '' && v !== null && v !== undefined);
+    const hasUnsaved = Object.entries(scores).some(([id, v]) => {
+      if (v === '' || v === null || v === undefined) return false;
+      return String(v) !== String(savedScoresRef.current[id] ?? '');
+    });
     if (hasUnsaved) { setShowUnsavedWarning(true); return; }
     if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
     onClose();
@@ -2672,26 +2677,26 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           <Button onClick={handleClose} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-900">{headerTitle}</h2>
-              <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${!isTrial ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{!isTrial ? 'Live Event' : 'Trial Data'}</span>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">{headerTitle}</h2>
+              <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${!isTrial ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300' : 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'}`}>{!isTrial ? 'Live Event' : 'Trial Data'}</span>
             </div>
-            <div className="text-sm font-semibold mt-1 text-slate-600 flex items-center gap-2 flex-wrap">
+            <div className="text-sm font-semibold mt-1 text-slate-600 dark:text-slate-400 flex items-center gap-2 flex-wrap">
               {subtitle}
               {!isTrial && (
                 isEditingRecord ? (
-                  <span className="flex items-center gap-2 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                    <input type="number" step="0.01" value={editableRecord.value} onChange={e => setEditableRecord({...editableRecord, value: e.target.value})} className="w-16 px-1 py-0.5 text-xs outline-none border border-amber-300 rounded" placeholder="Val"/>
-                    <input type="text"   value={editableRecord.holder} onChange={e => setEditableRecord({...editableRecord, holder: e.target.value})} className="w-32 px-1 py-0.5 text-xs outline-none border border-amber-300 rounded" placeholder="Name"/>
+                  <span className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded border border-amber-200 dark:border-amber-700">
+                    <input type="number" step="0.01" value={editableRecord.value} onChange={e => setEditableRecord({...editableRecord, value: e.target.value})} className="w-16 px-1 py-0.5 text-xs outline-none border border-amber-300 rounded bg-white dark:bg-slate-700 dark:text-white" placeholder="Val"/>
+                    <input type="text"   value={editableRecord.holder} onChange={e => setEditableRecord({...editableRecord, holder: e.target.value})} className="w-32 px-1 py-0.5 text-xs outline-none border border-amber-300 rounded bg-white dark:bg-slate-700 dark:text-white" placeholder="Name"/>
                     <button onClick={handleManualRecordUpdate} className="text-emerald-600 hover:text-emerald-800"><CheckCircle2 size={14}/></button>
                     <button onClick={() => setIsEditingRecord(false)} className="text-red-500 hover:text-red-700"><X size={14}/></button>
                   </span>
                 ) : currentRecord ? (
-                  <span className="text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 shadow-sm flex items-center gap-2 group/rec">
+                  <span className="text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-900/30 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-700 shadow-sm flex items-center gap-2 group/rec">
                     <span>🏆 Record: {currentRecord.record_value}{isTrack?'s':'m'} ({currentRecord.record_holder})</span>
                     <button onClick={() => { setEditableRecord({ value: currentRecord.record_value, holder: currentRecord.record_holder }); setIsEditingRecord(true); }} className="opacity-0 group-hover/rec:opacity-100 transition-opacity text-amber-500 hover:text-amber-700"><Edit size={12}/></button>
                   </span>
                 ) : (
-                  <span className="text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-200 shadow-sm flex items-center gap-2 group/rec">
+                  <span className="text-slate-400 dark:text-slate-500 font-bold bg-slate-50 dark:bg-slate-700 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-600 shadow-sm flex items-center gap-2 group/rec">
                     <span>No Record Set</span>
                     <button onClick={() => { setEditableRecord({ value: '', holder: '' }); setIsEditingRecord(true); }} className="opacity-0 group-hover/rec:opacity-100 transition-opacity text-slate-400 hover:text-slate-600"><Edit size={12}/></button>
                   </span>
@@ -2703,14 +2708,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {/* Flag issue button */}
           {!isTrial && (
-            <button onClick={() => setShowFlagModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors">
+            <button onClick={() => setShowFlagModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50 border border-amber-200 dark:border-amber-700 transition-colors">
               <AlertCircle size={15}/> Flag Issue
             </button>
           )}
           {showHeatSplitter && (
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              <label className="text-sm font-medium text-slate-600 whitespace-nowrap hidden sm:block">Heats:</label>
-              <select value={heatSize} onChange={e => setHeatSize(e.target.value)} className="bg-transparent font-bold outline-none text-slate-900 cursor-pointer">
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
+              <label className="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap hidden sm:block">Heats:</label>
+              <select value={heatSize} onChange={e => setHeatSize(e.target.value)} className="bg-transparent font-bold outline-none text-slate-900 dark:text-white cursor-pointer">
                 <option value="All">No Split</option>
                 <option value="4">4</option><option value="6">6</option><option value="8">8</option>
                 <option value="10">10</option><option value="12">12</option>
@@ -2727,7 +2732,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       {heatSize !== 'All' && heatKeys.length > 1 && (
         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
           <button onClick={() => { if (activeHeat > 1) { setActiveHeat(h => h - 1); setScores({}); } }} disabled={activeHeat <= 1}
-            className="p-2.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronLeft size={20}/></button>
+            className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronLeft size={20}/></button>
           <div className="flex-1 flex items-center justify-center gap-2 flex-wrap">
             {heatKeys.map(h => {
               const num = parseInt(h);
@@ -2736,14 +2741,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               return (
                 <button key={h} onClick={() => { setActiveHeat(num); setScores({}); }}
                   className={`w-9 h-9 rounded-full text-sm font-bold transition-colors flex items-center justify-center
-                    ${active ? 'bg-sky-500 text-white shadow-md' : done ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' : 'bg-white text-slate-500 border border-slate-300 hover:bg-slate-100'}`}>
+                    ${active ? 'bg-sky-500 text-white shadow-md' : done ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'}`}>
                   {done ? '✓' : num}
                 </button>
               );
             })}
           </div>
           <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { setActiveHeat(next); setScores({}); } }} disabled={!groupedRoster[activeHeat + 1]}
-            className="p-2.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronRight size={20}/></button>
+            className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronRight size={20}/></button>
 
           {/* Countdown timer */}
           <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-3">
@@ -2772,10 +2777,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
       <Card className="!p-0 overflow-hidden relative min-h-[300px]">
         {isLoading && !isRefreshingRoster ? (
-          <div className="absolute inset-0 bg-white flex items-center justify-center z-20"><Loader2 className="animate-spin text-blue-600" size={32}/></div>
+          <div className="absolute inset-0 bg-white dark:bg-slate-800 flex items-center justify-center z-20"><Loader2 className="animate-spin text-blue-600" size={32}/></div>
         ) : (
           <>
-            {isRefreshingRoster && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-20"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}
+            {isRefreshingRoster && <div className="absolute inset-0 bg-white/50 dark:bg-slate-800/50 backdrop-blur-[1px] flex items-center justify-center z-20"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}
             {/* ── MOBILE card layout (hidden on md+) ── */}
             <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
               {studentRoster.length === 0 ? (
@@ -2812,7 +2817,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                               value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
                               onChange={(e) => handleScoreChange(student.id, e.target.value)}
                               onKeyDown={(e) => handleKeyDown(e, nextId)}
-                              className="w-24 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              className="w-24 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                           )}
                           {!isTrial && (
@@ -2896,7 +2901,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                       value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
                                       onChange={(e) => handleScoreChange(student.id, e.target.value)}
                                       onKeyDown={(e) => handleKeyDown(e, nextId)}
-                                      className="w-full px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      className="w-full px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                   )}
                                 </td>
