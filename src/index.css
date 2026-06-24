@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Dark mode global overrides ─────────────────────────────────────── */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #1e293b;   /* slate-800 */
+  color: #e2e8f0;              /* slate-200 */
+  border-color: #475569;       /* slate-600 */
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;              /* slate-500 */
+}
+
+.dark input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}
+
+.dark label {
+  color: #cbd5e1;              /* slate-300 */
+}
+
+/* Any hardcoded white/light surfaces inside modules */
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200 {
+  border-color: #334155 !important;
+}
+
+.dark .text-slate-900 { color: #f1f5f9 !important; }
+.dark .text-slate-800 { color: #e2e8f0 !important; }
+.dark .text-slate-700 { color: #cbd5e1 !important; }
+.dark .text-slate-600 { color: #94a3b8 !important; }
+.dark .text-slate-500 { color: #64748b !important; }
+
+/* Table rows */
+.dark tbody tr:hover {
+  background-color: #1e293b;
+}
+
+.dark thead {
+  background-color: #0f172a;   /* slate-900 */
+}
+
+.dark th {
+  color: #94a3b8;              /* slate-400 */
+}
+
+.dark td {
+  color: #cbd5e1;              /* slate-300 */
+  border-color: #1e293b;
+}
+
+/* Dividers */
+.dark hr,
+.dark .divide-y > * + * {
+  border-color: #334155;
+}
+
+/* Scrollbars */
+.dark ::-webkit-scrollbar { width: 8px; height: 8px; }
+.dark ::-webkit-scrollbar-track { background: #0f172a; }
+.dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: #475569; }
