@@ -2664,7 +2664,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const isTrack = isTrial ? activity.filters.unit === 'seconds' : activity.type === 'track';
   const unitLabel = isPlacingMode ? 'Place' : isTrial ? (activity.filters.unit === 'seconds' ? 'Secs' : activity.filters.unit === 'cm' ? 'cm' : 'Meters') : (isTrack ? 'Secs' : 'Meters');
   const headerTitle = isTrial ? `${activity.trialData.name} - ${activity.filters.customActivityName}` : activity.name;
-  const showHeatSplitter = (isTrial ? activity.filters.customActivityName : activity.name).toLowerCase().includes('100m');
+  const heatsEnabled = heatSize !== 'All';
   let subtitle = isTrial
     ? [activity.filters.ageGroup !== 'All' && activity.filters.ageGroup, activity.filters.className.trim() && `Class ${activity.filters.className}`, activity.filters.house !== 'All' && `House: ${activity.filters.house}`, activity.filters.gender !== 'All' && activity.filters.gender].filter(Boolean).join(' • ') + ' • PE Assessment'
     : `${activity.ageGroup} ${activity.gender} • ${activity.type.toUpperCase()}`;
@@ -2744,16 +2744,29 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               <AlertCircle size={15}/> Flag Issue
             </button>
           )}
-          {showHeatSplitter && (
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
-              <label className="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap hidden sm:block">Heats:</label>
-              <select value={heatSize} onChange={e => setHeatSize(e.target.value)} className="bg-transparent font-bold outline-none text-slate-900 dark:text-white cursor-pointer">
-                <option value="All">No Split</option>
-                <option value="4">4</option><option value="6">6</option><option value="8">8</option>
-                <option value="10">10</option><option value="12">12</option>
-              </select>
-            </div>
-          )}
+          {/* Heat toggle */}
+          <div className={`flex items-center gap-1 rounded-xl border transition-colors ${heatsEnabled ? 'bg-sky-50 dark:bg-sky-900/30 border-sky-200 dark:border-sky-700' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'}`}>
+            <button
+              onClick={() => setHeatSize(heatsEnabled ? 'All' : '4')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-l-xl text-sm font-semibold transition-colors ${heatsEnabled ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}`}
+              title={heatsEnabled ? 'Disable heats' : 'Split into heats'}
+            >
+              <div className={`w-8 h-4 rounded-full transition-colors relative flex-shrink-0 ${heatsEnabled ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-500'}`}>
+                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${heatsEnabled ? 'left-4' : 'left-0.5'}`}/>
+              </div>
+              <span className="hidden sm:inline whitespace-nowrap">Heats</span>
+            </button>
+            {heatsEnabled && (
+              <div className="flex items-center border-l border-sky-200 dark:border-sky-700 px-2">
+                {['4','6','8','10','12'].map(n => (
+                  <button key={n} onClick={() => setHeatSize(n)}
+                    className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${heatSize === n ? 'bg-sky-500 text-white' : 'text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-800'}`}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0}>
             {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> Save{heatSize !== 'All' ? ` Heat ${activeHeat}` : ''}</>}
           </Button>
