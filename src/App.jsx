@@ -4707,7 +4707,7 @@ export default function App() {
           <main className="flex-1 overflow-y-auto min-w-0">
             {/* Mobile header */}
             <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center hide-on-print">
-              <div className="flex items-center gap-2"><div className="p-1 bg-sky-500 rounded-lg"><Trophy size={16} className="text-white"/></div><span className="font-bold text-slate-800">SportsDay Pro</span></div>
+              <div className="flex items-center gap-2"><img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/><span className="font-bold text-slate-800">SportsDay Pro</span></div>
               <div className="flex items-center gap-1">
                 <button onClick={() => setMobileNavOpen(true)} className="p-2 text-slate-500 hover:text-slate-800"><Menu size={22}/></button>
                 <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-red-500"><LogOut size={20}/></button>
@@ -4756,7 +4756,7 @@ export default function App() {
           )}
           <main className="flex-1 overflow-y-auto min-w-0">
             <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center hide-on-print">
-              <div className="flex items-center gap-2"><div className="p-1 bg-sky-500 rounded-lg"><Trophy size={16} className="text-white"/></div><span className="font-bold text-slate-800 dark:text-white">SportsDay Pro</span></div>
+              <div className="flex items-center gap-2"><img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/><span className="font-bold text-slate-800 dark:text-white">SportsDay Pro</span></div>
               <div className="flex items-center gap-1">
                 <button onClick={() => setShowChangePw(true)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-sky-600" title="Change Password"><Key size={18}/></button>
                 <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-red-500"><LogOut size={20}/></button>
