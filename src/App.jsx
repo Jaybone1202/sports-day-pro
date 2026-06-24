@@ -848,7 +848,7 @@ const PlanningModule = ({ user, showToast }) => {
 const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const [events, setEvents]               = useState([]);
   const [schoolRecords, setSchoolRecords] = useState([]);
-  const [selectedEventId, setSelectedEventId] = useState('new');
+  const [selectedEventId, setSelectedEventId] = useState(embedded ? null : 'new');
   const [isLoading, setIsLoading]         = useState(true);
 
   const [eventName, setEventName]     = useState('');
@@ -887,7 +887,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
 
   const handleEventSelect = async (eventId) => {
     setSelectedEventId(eventId);
-    if (eventId === 'new') {
+    if (!eventId || eventId === 'new') {
       setEventName(''); setEventDate(''); setActivities([]);
       setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase());
       return;
@@ -977,7 +977,8 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
       setIsSaving(true);
       try {
         await supabase.from('events').delete().eq('id', item);
-        handleEventSelect('new');
+        setEvents(prev => prev.filter(e => e.id !== item));
+        handleEventSelect(embedded ? null : 'new');
         showToast('Event deleted successfully.');
       } catch (e) { showToast('Failed to delete event.', 'error'); } finally { setIsSaving(false); }
     }
@@ -987,6 +988,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const handleToggleLock = async () => {
     const next = !eventIsLocked;
     setEventIsLocked(next);
+    setEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, is_locked: next } : e));
     setLockConfirm(false);
     await supabase.from('events').update({ is_locked: next }).eq('id', selectedEventId);
     showToast(next ? 'Event locked — staff cannot save new scores' : 'Event unlocked');
@@ -1043,7 +1045,16 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
       }
 
       showToast('Event saved successfully!');
-      if (!embedded && onBack) onBack();
+      if (!embedded && onBack) {
+        onBack();
+      } else {
+        if (selectedEventId === 'new') {
+          setEvents(prev => [{ id: targetEventId, name: eventName, event_date: eventDate, is_active: eventIsActive, is_locked: false, parent_access_code: parentCode }, ...prev]);
+          setSelectedEventId(targetEventId);
+        } else {
+          setEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, name: eventName, event_date: eventDate, is_active: eventIsActive } : e));
+        }
+      }
     } catch (err) { showToast('Failed to save the event. ' + (err.message || ''), 'error'); } finally { setIsSaving(false); }
   };
 
@@ -1086,262 +1097,305 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
       )}
 
       {embedded && (
-        <div className="flex items-center justify-end gap-2 pb-2">
-          {selectedEventId !== 'new' && (
-            <button onClick={() => setLockConfirm(true)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
-              {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
-            </button>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-slate-500 dark:text-slate-400">Click an event to edit it, or create a new one.</p>
+            <Button onClick={() => handleEventSelect('new')} variant="primary"><Plus size={16} className="mr-1"/> New Event</Button>
+          </div>
+
+          {isLoading && !selectedEventId ? (
+            <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-slate-400" size={28}/></div>
+          ) : events.length === 0 ? (
+            <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl">
+              <Calendar className="mx-auto mb-3 text-slate-300 dark:text-slate-600" size={40}/>
+              <p className="font-semibold text-slate-500 dark:text-slate-400">No events yet</p>
+              <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Click "New Event" to get started.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {events.map(evt => {
+                const isSelected = selectedEventId === evt.id;
+                const locked = evt.is_locked;
+                return (
+                  <button key={evt.id} onClick={() => handleEventSelect(evt.id)}
+                    className={`text-left p-4 rounded-xl border-2 transition-all ${
+                      isSelected
+                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md'
+                        : locked
+                        ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 hover:border-amber-400'
+                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
+                    }`}>
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">{evt.name}</span>
+                      {locked && <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5"/>}
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {new Date(evt.event_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </p>
+                    <div className="flex gap-1.5 mt-2.5 flex-wrap">
+                      {locked && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
+                          <Lock size={9}/> Locked
+                        </span>
+                      )}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${evt.is_active ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                        {evt.is_active ? 'Live' : 'Archived'}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           )}
-          {selectedEventId !== 'new' && <Button onClick={() => setModalConfig({ isOpen: true, item: selectedEventId, type: 'event' })} variant="danger" disabled={isSaving}><Trash2 size={18}/></Button>}
-          <Button onClick={handleSaveEvent} variant="success" disabled={isSaving}>
-            {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : selectedEventId === 'new' ? 'Create Event' : 'Update Event'}
-          </Button>
+
+          {selectedEventId && (
+            <div className="border-t border-slate-200 dark:border-slate-700 pt-6 space-y-5">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  {selectedEventId === 'new' ? <><Plus size={18} className="text-sky-500"/> New Event</> : <><Calendar size={18} className="text-sky-500"/> {eventName || 'Edit Event'}</>}
+                </h3>
+                <div className="flex gap-2 flex-wrap items-center">
+                  {selectedEventId !== 'new' && (
+                    <button onClick={() => setLockConfirm(true)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                      {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
+                    </button>
+                  )}
+                  {selectedEventId !== 'new' && (
+                    <Button onClick={() => setModalConfig({ isOpen: true, item: selectedEventId, type: 'event' })} variant="danger" disabled={isSaving}><Trash2 size={16}/></Button>
+                  )}
+                  <Button onClick={handleSaveEvent} variant="success" disabled={isSaving}>
+                    {isSaving ? <><Loader2 className="animate-spin" size={16}/> Saving...</> : selectedEventId === 'new' ? 'Create Event' : 'Update Event'}
+                  </Button>
+                  <button onClick={() => setSelectedEventId(null)} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors" title="Close"><X size={18}/></button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="space-y-4 lg:col-span-1">
+                  <Card>
+                    <h3 className="font-semibold text-slate-900 dark:text-white border-b dark:border-slate-700 pb-2 mb-4 flex items-center gap-2"><Calendar size={18}/> Event Details</h3>
+                    <div className="space-y-4">
+                      <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Event Name</label><input type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g., Annual Inter-House Athletics" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
+                      <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label><input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
+                      <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${eventIsActive ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700' : 'border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'}`}>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{eventIsActive ? 'Event is Live' : 'Event is Archived'}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{eventIsActive ? 'Parent portal is open.' : 'Parent portal is closed.'}</p>
+                        </div>
+                        <button type="button" onClick={() => setEventIsActive(p => !p)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${eventIsActive ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${eventIsActive ? 'translate-x-6' : 'translate-x-1'}`}/>
+                        </button>
+                      </div>
+                      {selectedEventId !== 'new' && (
+                        <>
+                          <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{eventIsLocked ? <Lock size={14} className="text-amber-500"/> : <Unlock size={14} className="text-slate-400"/>} {eventIsLocked ? 'Scoring Locked' : 'Scoring Open'}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{eventIsLocked ? 'Staff cannot save new scores.' : 'Staff can enter and save scores.'}</p>
+                            </div>
+                            <button type="button" onClick={() => setLockConfirm(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 hover:border-amber-300'}`}>
+                              {eventIsLocked ? 'Unlock' : 'Lock'}
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Show all activities to staff</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{staffSeeAll ? 'All staff see all activities.' : 'Assign specific activities to each staff member below.'}</p>
+                            </div>
+                            <button type="button" onClick={handleToggleStaffSeeAll} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${staffSeeAll ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${staffSeeAll ? 'translate-x-6' : 'translate-x-1'}`}/>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </Card>
+
+                  <Card className="bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-800">
+                    <h3 className="font-semibold text-sky-900 dark:text-sky-300 border-b border-sky-200 dark:border-sky-800 pb-2 mb-4 flex items-center gap-2"><Key size={18}/> Parent Access Code</h3>
+                    <p className="text-sm text-sky-700 dark:text-sky-400 mb-3">Share this code with parents to view the live leaderboard.</p>
+                    <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-lg border border-sky-200 dark:border-sky-700 text-center text-2xl font-mono font-bold tracking-widest text-slate-800 dark:text-white mb-3">{parentCode}</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => { navigator.clipboard.writeText(parentCode); showToast('Code copied!'); }}
+                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 text-sky-700 dark:text-sky-400 text-sm font-semibold hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors">
+                        <Save size={14}/> Copy Code
+                      </button>
+                      <button onClick={() => { const msg = `🏆 SportsDay Live!\n\nJoin us today using access code: *${parentCode}*\n\nOpen the parent portal at: ${window.location.origin}/?portal=parent`; window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank'); }}
+                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
+                        <Smartphone size={14}/> WhatsApp
+                      </button>
+                    </div>
+                    {selectedEventId === 'new' && (
+                      <button onClick={() => setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
+                        className="w-full mt-2 text-xs text-sky-600 dark:text-sky-400 hover:underline text-center">
+                        Regenerate code
+                      </button>
+                    )}
+                  </Card>
+                </div>
+
+                <div className="space-y-6 lg:col-span-2">
+                  <Card className="!p-4">
+                    <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between border-b dark:border-slate-700 pb-3 mb-4 gap-4">
+                      <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2"><Activity size={18}/> Activity Builder</h3>
+                      <div className="flex flex-wrap items-center gap-2 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-200 dark:border-slate-600">
+                        <select value={schoolGenderType} onChange={e => setSchoolGenderType(e.target.value)} className="text-sm px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                          <option value="Co-ed">Co-ed</option><option value="Boys Only">Boys Only</option><option value="Girls Only">Girls Only</option>
+                        </select>
+                        <div className="flex items-center gap-2 px-2 border-l border-slate-300 dark:border-slate-600">
+                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Kids/House:</span>
+                          <input type="number" min="1" max="50" value={presetParticipants} onChange={(e) => setPresetParticipants(parseInt(e.target.value)||1)} className="w-12 px-1 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded outline-none text-center bg-white dark:bg-slate-700 dark:text-white"/>
+                        </div>
+                        <Button onClick={() => applyPreset('Primary')} variant="secondary" className="!text-xs !py-1.5">Primary Preset</Button>
+                        <Button onClick={() => applyPreset('High')}    variant="secondary" className="!text-xs !py-1.5">High School Preset</Button>
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleAddActivity} className="bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-200 dark:border-slate-600 mb-6 space-y-3">
+                      <div className="flex flex-wrap gap-3 items-end">
+                        <div className="w-full sm:w-auto flex-1 min-w-[120px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Age Group</label><select value={newActivity.ageGroup} onChange={(e) => setNewActivity({...newActivity, ageGroup: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white">{['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open','U14 (Open)','U19 (Open)'].map(a => <option key={a} value={a}>{a}</option>)}</select></div>
+                        <div className="w-full sm:w-auto flex-1 min-w-[100px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Gender</label><select value={newActivity.gender} onChange={(e) => setNewActivity({...newActivity, gender: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="Boys">Boys</option><option value="Girls">Girls</option><option value="Mixed">Mixed</option></select></div>
+                        <div className="w-full sm:w-auto flex-1 min-w-[120px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Type</label><select value={newActivity.type} onChange={(e) => setNewActivity({...newActivity, type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="track">Track (Time)</option><option value="field">Field (Dist)</option><option value="long_distance">Long Dist</option></select></div>
+                        <div className="w-full sm:w-auto flex-1 min-w-[130px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Scoring</label><select value={newActivity.scoringType} onChange={(e) => setNewActivity({...newActivity, scoringType: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="metric">Metric (Time/Dist)</option><option value="placing">Placing (1st/2nd…)</option></select></div>
+                        <div className="w-full sm:w-auto flex-1 min-w-[100px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Kids/House</label><input type="number" min="1" max="50" value={newActivity.participantsPerHouse} onChange={(e) => setNewActivity({...newActivity, participantsPerHouse: parseInt(e.target.value)||2})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-center"/></div>
+                        <div className="w-full sm:w-auto flex-[2] min-w-[150px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Activity Name</label><input type="text" value={newActivity.name} onChange={(e) => setNewActivity({...newActivity, name: e.target.value})} placeholder="e.g., 100m Sprint" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
+                      </div>
+                      <div className="flex flex-wrap sm:flex-nowrap gap-3 items-end pt-2 border-t border-slate-200 dark:border-slate-600">
+                        <div className="w-full sm:w-auto flex-1"><label className="block text-xs font-medium text-amber-600 mb-1 uppercase tracking-wider flex items-center gap-1"><Trophy size={12}/> Record Value</label><input type="number" step="0.01" value={newActivity.recordValue} onChange={(e) => setNewActivity({...newActivity, recordValue: e.target.value})} placeholder="e.g., 12.45" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
+                        <div className="w-full sm:w-auto flex-[2]"><label className="block text-xs font-medium text-amber-600 mb-1 uppercase tracking-wider">Record Holder Name</label><input type="text" value={newActivity.recordHolder} onChange={(e) => setNewActivity({...newActivity, recordHolder: e.target.value})} placeholder="e.g., Jason B. (Red House)" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
+                        <Button type="submit" variant="primary" className="w-full sm:w-auto mt-2 sm:mt-0"><Plus size={20}/> Add</Button>
+                      </div>
+                    </form>
+
+                    {isLoading ? (
+                      <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-slate-400"/></div>
+                    ) : activities.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-lg">No activities added yet.</div>
+                    ) : (
+                      <>
+                        <div className="md:hidden border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
+                          {activities.map(act => (
+                            <div key={act.id} className="px-4 py-3 flex items-start gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900 dark:text-white text-sm">{act.name}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_',' ').toUpperCase()}</span>
+                                </div>
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                                  <span className="font-semibold">{act.ageGroup}</span> · <span className={act.gender === 'Boys' ? 'text-blue-500' : act.gender === 'Girls' ? 'text-pink-500' : 'text-purple-500'}>{act.gender}</span> · {act.participantsPerHouse || 2} per house
+                                  {act.recordValue && <span className="ml-1 text-amber-600 dark:text-amber-400"> · {act.recordValue}</span>}
+                                </p>
+                                {!staffSeeAll && selectedEventId !== 'new' && !act.id.startsWith('temp-') && (
+                                  <div className="mt-2 flex flex-wrap gap-1 items-center">
+                                    {(assignments[act.id] || []).map(sid => {
+                                      const s = staffList.find(st => st.id === sid);
+                                      if (!s) return null;
+                                      return (
+                                        <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
+                                          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
+                                          {s.first_name[0]}{s.last_name[0]} <X size={10}/>
+                                        </button>
+                                      );
+                                    })}
+                                    <div className="relative">
+                                      <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
+                                        className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
+                                        <Plus size={12}/>
+                                      </button>
+                                      {openAssignDropdown === act.id && (
+                                        <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[140px] py-1">
+                                          {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
+                                            <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
+                                              className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
+                                              {s.first_name} {s.last_name}
+                                            </button>
+                                          ))}
+                                          {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
+                                            <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 flex-shrink-0 transition-colors"><Trash2 size={16}/></button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg max-h-[500px] overflow-y-auto">
+                          <table className="w-full text-sm text-left">
+                            <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
+                              <tr>
+                                <th className="px-4 py-3 font-semibold">Group</th>
+                                <th className="px-4 py-3 font-semibold">Activity</th>
+                                <th className="px-4 py-3 font-semibold text-center">Kids/House</th>
+                                <th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th>
+                                {!staffSeeAll && selectedEventId !== 'new' && <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300">Assigned Staff</th>}
+                                <th className="px-4 py-3 text-right font-semibold">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                              {activities.map(act => (
+                                <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
+                                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
+                                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
+                                  <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
+                                  <td className="px-4 py-3"><div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity focus-within:opacity-100"><input type="number" step="0.01" value={act.recordValue || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordValue', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Val" className="record-input w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/><input type="text" value={act.recordHolder || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordHolder', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Holder Name" className="record-input w-32 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/></div></td>
+                                  {!staffSeeAll && selectedEventId !== 'new' && (
+                                    <td className="px-4 py-3">
+                                      {!act.id.startsWith('temp-') ? (
+                                        <div className="flex flex-wrap gap-1 items-center">
+                                          {(assignments[act.id] || []).map(sid => {
+                                            const s = staffList.find(st => st.id === sid);
+                                            if (!s) return null;
+                                            return (
+                                              <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
+                                                title={`${s.first_name} ${s.last_name} — click to remove`}
+                                                className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
+                                                {s.first_name[0]}{s.last_name[0]} <X size={9}/>
+                                              </button>
+                                            );
+                                          })}
+                                          <div className="relative">
+                                            <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
+                                              className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
+                                              <Plus size={12}/>
+                                            </button>
+                                            {openAssignDropdown === act.id && (
+                                              <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[160px] py-1">
+                                                {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
+                                                  <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
+                                                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
+                                                    {s.first_name} {s.last_name}
+                                                  </button>
+                                                ))}
+                                                {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
+                                                  <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : <span className="text-xs text-slate-400 italic">Save event first</span>}
+                                    </td>
+                                  )}
+                                  <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    )}
+                  </Card>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="space-y-6 lg:col-span-1">
-          <Card className="bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800">
-            <label className="block text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Select Action</label>
-            <div className="relative">
-              <select value={selectedEventId} onChange={(e) => handleEventSelect(e.target.value)}
-                className="w-full px-3 py-2 border border-blue-300 dark:border-blue-700 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white appearance-none pr-8 font-medium text-slate-700">
-                <option value="new">✨ Create New Event...</option>
-                {events.length > 0 && <optgroup label="Existing Events">{events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</optgroup>}
-              </select>
-              <ChevronDown className="absolute right-2 top-2.5 text-blue-500 pointer-events-none" size={18}/>
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="font-semibold text-slate-900 dark:text-white border-b dark:border-slate-700 pb-2 mb-4 flex items-center gap-2"><Calendar size={18}/> Event Details</h3>
-            <div className="space-y-4">
-              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Event Name</label><input type="text" value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g., Annual Inter-House Athletics" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
-              <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label><input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
-              <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${eventIsActive ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700' : 'border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'}`}>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{eventIsActive ? '🟢 Event is Live' : '🔴 Event is Archived'}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{eventIsActive ? 'Parent portal is open — parents can view live results.' : 'Parent portal is closed. Results are locked.'}</p>
-                </div>
-                <button type="button" onClick={() => setEventIsActive(p => !p)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${eventIsActive ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${eventIsActive ? 'translate-x-6' : 'translate-x-1'}`}/>
-                </button>
-              </div>
-
-              {selectedEventId !== 'new' && (
-                <>
-                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{eventIsLocked ? <Lock size={14} className="text-amber-500"/> : <Unlock size={14} className="text-slate-400"/>} {eventIsLocked ? 'Scoring Locked' : 'Scoring Open'}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{eventIsLocked ? 'Staff cannot save new scores.' : 'Staff can enter and save scores.'}</p>
-                    </div>
-                    <button type="button" onClick={() => setLockConfirm(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 hover:border-amber-300'}`}>
-                      {eventIsLocked ? 'Unlock' : 'Lock'}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Show all activities to staff</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{staffSeeAll ? 'All staff see all activities.' : 'Assign specific activities to each staff member below.'}</p>
-                    </div>
-                    <button type="button" onClick={handleToggleStaffSeeAll} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${staffSeeAll ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${staffSeeAll ? 'translate-x-6' : 'translate-x-1'}`}/>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </Card>
-
-          <Card className="bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-800">
-            <h3 className="font-semibold text-sky-900 dark:text-sky-300 border-b border-sky-200 dark:border-sky-800 pb-2 mb-4 flex items-center gap-2"><Key size={18}/> Parent Access Code</h3>
-            <p className="text-sm text-sky-700 dark:text-sky-400 mb-3">Share this code with parents to view the live leaderboard.</p>
-            <div className="bg-white dark:bg-slate-800 px-4 py-3 rounded-lg border border-sky-200 dark:border-sky-700 text-center text-2xl font-mono font-bold tracking-widest text-slate-800 dark:text-white mb-3">{parentCode}</div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => { navigator.clipboard.writeText(parentCode); showToast('Code copied!'); }}
-                className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 text-sky-700 dark:text-sky-400 text-sm font-semibold hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors">
-                <Save size={14}/> Copy Code
-              </button>
-              <button
-                onClick={() => {
-                  const msg = `🏆 SportsDay Live!\n\nJoin us today using access code: *${parentCode}*\n\nOpen the parent portal at: ${window.location.origin}/?portal=parent`;
-                  window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
-                }}
-                className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
-                <Smartphone size={14}/> WhatsApp
-              </button>
-            </div>
-            {selectedEventId === 'new' && (
-              <button onClick={() => setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
-                className="w-full mt-2 text-xs text-sky-600 dark:text-sky-400 hover:underline text-center">
-                Regenerate code
-              </button>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-6 lg:col-span-2">
-          <Card className="!p-4">
-            <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between border-b pb-3 mb-4 gap-4">
-              <h3 className="font-semibold text-slate-900 flex items-center gap-2"><Activity size={18}/> Activity Builder</h3>
-              <div className="flex flex-wrap items-center gap-2 bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg border border-slate-200 dark:border-slate-600">
-                <select value={schoolGenderType} onChange={e => setSchoolGenderType(e.target.value)} className="text-sm px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
-                  <option value="Co-ed">Co-ed</option><option value="Boys Only">Boys Only</option><option value="Girls Only">Girls Only</option>
-                </select>
-                <div className="flex items-center gap-2 px-2 border-l border-slate-300 dark:border-slate-600">
-                  <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">Kids/House:</span>
-                  <input type="number" min="1" max="50" value={presetParticipants} onChange={(e) => setPresetParticipants(parseInt(e.target.value)||1)} className="w-12 px-1 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded outline-none text-center bg-white dark:bg-slate-700 dark:text-white"/>
-                </div>
-                <Button onClick={() => applyPreset('Primary')} variant="secondary" className="!text-xs !py-1.5">Primary Preset</Button>
-                <Button onClick={() => applyPreset('High')}    variant="secondary" className="!text-xs !py-1.5">High School Preset</Button>
-              </div>
-            </div>
-
-            <form onSubmit={handleAddActivity} className="bg-slate-50 dark:bg-slate-700/30 p-4 rounded-lg border border-slate-200 dark:border-slate-600 mb-6 space-y-3">
-              <div className="flex flex-wrap gap-3 items-end">
-                <div className="w-full sm:w-auto flex-1 min-w-[120px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Age Group</label><select value={newActivity.ageGroup} onChange={(e) => setNewActivity({...newActivity, ageGroup: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white">{['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open','U14 (Open)','U19 (Open)'].map(a => <option key={a} value={a}>{a}</option>)}</select></div>
-                <div className="w-full sm:w-auto flex-1 min-w-[100px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Gender</label><select value={newActivity.gender} onChange={(e) => setNewActivity({...newActivity, gender: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="Boys">Boys</option><option value="Girls">Girls</option><option value="Mixed">Mixed</option></select></div>
-                <div className="w-full sm:w-auto flex-1 min-w-[120px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Type</label><select value={newActivity.type} onChange={(e) => setNewActivity({...newActivity, type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="track">Track (Time)</option><option value="field">Field (Dist)</option><option value="long_distance">Long Dist</option></select></div>
-                <div className="w-full sm:w-auto flex-1 min-w-[130px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Scoring</label><select value={newActivity.scoringType} onChange={(e) => setNewActivity({...newActivity, scoringType: e.target.value})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"><option value="metric">Metric (Time/Dist)</option><option value="placing">Placing (1st/2nd…)</option></select></div>
-                <div className="w-full sm:w-auto flex-1 min-w-[100px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Kids/House</label><input type="number" min="1" max="50" value={newActivity.participantsPerHouse} onChange={(e) => setNewActivity({...newActivity, participantsPerHouse: parseInt(e.target.value)||2})} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-center"/></div>
-                <div className="w-full sm:w-auto flex-[2] min-w-[150px]"><label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Activity Name</label><input type="text" value={newActivity.name} onChange={(e) => setNewActivity({...newActivity, name: e.target.value})} placeholder="e.g., 100m Sprint" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
-              </div>
-              <div className="flex flex-wrap sm:flex-nowrap gap-3 items-end pt-2 border-t border-slate-200 dark:border-slate-600">
-                <div className="w-full sm:w-auto flex-1"><label className="block text-xs font-medium text-amber-600 mb-1 uppercase tracking-wider flex items-center gap-1"><Trophy size={12}/> Record Value</label><input type="number" step="0.01" value={newActivity.recordValue} onChange={(e) => setNewActivity({...newActivity, recordValue: e.target.value})} placeholder="e.g., 12.45" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
-                <div className="w-full sm:w-auto flex-[2]"><label className="block text-xs font-medium text-amber-600 mb-1 uppercase tracking-wider">Record Holder Name</label><input type="text" value={newActivity.recordHolder} onChange={(e) => setNewActivity({...newActivity, recordHolder: e.target.value})} placeholder="e.g., Jason B. (Red House)" className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
-                <Button type="submit" variant="primary" className="w-full sm:w-auto mt-2 sm:mt-0"><Plus size={20}/> Add</Button>
-              </div>
-            </form>
-
-            {isLoading ? (
-              <div className="text-center py-8"><Loader2 className="animate-spin mx-auto text-slate-400"/></div>
-            ) : activities.length === 0 ? (
-              <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-lg">No activities added yet.</div>
-            ) : (
-              <>
-                {/* Mobile card list */}
-                <div className="md:hidden border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
-                  {activities.map(act => (
-                    <div key={act.id} className="px-4 py-3 flex items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-slate-900 dark:text-white text-sm">{act.name}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_',' ').toUpperCase()}</span>
-                        </div>
-                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                          <span className="font-semibold">{act.ageGroup}</span> · <span className={act.gender === 'Boys' ? 'text-blue-500' : act.gender === 'Girls' ? 'text-pink-500' : 'text-purple-500'}>{act.gender}</span> · {act.participantsPerHouse || 2} per house
-                          {act.recordValue && <span className="ml-1 text-amber-600 dark:text-amber-400"> · 🏆 {act.recordValue}</span>}
-                        </p>
-                        {!staffSeeAll && selectedEventId !== 'new' && !act.id.startsWith('temp-') && (
-                          <div className="mt-2 flex flex-wrap gap-1 items-center">
-                            {(assignments[act.id] || []).map(sid => {
-                              const s = staffList.find(st => st.id === sid);
-                              if (!s) return null;
-                              return (
-                                <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
-                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
-                                  {s.first_name[0]}{s.last_name[0]} <X size={10}/>
-                                </button>
-                              );
-                            })}
-                            <div className="relative">
-                              <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
-                                className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
-                                <Plus size={12}/>
-                              </button>
-                              {openAssignDropdown === act.id && (
-                                <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[140px] py-1">
-                                  {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
-                                    <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
-                                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
-                                      {s.first_name} {s.last_name}
-                                    </button>
-                                  ))}
-                                  {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
-                                    <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 flex-shrink-0 transition-colors"><Trash2 size={16}/></button>
-                    </div>
-                  ))}
-                </div>
-                {/* Desktop table */}
-                <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg max-h-[500px] overflow-y-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold">Group</th>
-                        <th className="px-4 py-3 font-semibold">Activity</th>
-                        <th className="px-4 py-3 font-semibold text-center">Kids/House</th>
-                        <th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th>
-                        {!staffSeeAll && selectedEventId !== 'new' && <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300">Assigned Staff</th>}
-                        <th className="px-4 py-3 text-right font-semibold">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                      {activities.map(act => (
-                        <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
-                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
-                          <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
-                          <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
-                          <td className="px-4 py-3"><div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity focus-within:opacity-100"><input type="number" step="0.01" value={act.recordValue || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordValue', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Val" className="record-input w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/><input type="text" value={act.recordHolder || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordHolder', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Holder Name" className="record-input w-32 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/></div></td>
-                          {!staffSeeAll && selectedEventId !== 'new' && (
-                            <td className="px-4 py-3">
-                              {!act.id.startsWith('temp-') ? (
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  {(assignments[act.id] || []).map(sid => {
-                                    const s = staffList.find(st => st.id === sid);
-                                    if (!s) return null;
-                                    return (
-                                      <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
-                                        title={`${s.first_name} ${s.last_name} — click to remove`}
-                                        className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
-                                        {s.first_name[0]}{s.last_name[0]} <X size={9}/>
-                                      </button>
-                                    );
-                                  })}
-                                  <div className="relative">
-                                    <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
-                                      className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
-                                      <Plus size={12}/>
-                                    </button>
-                                    {openAssignDropdown === act.id && (
-                                      <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[160px] py-1">
-                                        {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
-                                          <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
-                                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
-                                            {s.first_name} {s.last_name}
-                                          </button>
-                                        ))}
-                                        {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
-                                          <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : <span className="text-xs text-slate-400 italic">Save event first</span>}
-                            </td>
-                          )}
-                          <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </Card>
-        </div>
-      </div>
     </div>
   );
 };
