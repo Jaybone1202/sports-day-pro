@@ -45,6 +45,8 @@ import {
   Timer,
   ChevronLeft,
   ChevronRight,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 
 // ==========================================
@@ -817,7 +819,33 @@ const HouseSetupModule = ({ onBack, user, showToast }) => {
 // 6. EVENT SETUP MODULE
 // ==========================================
 
-const EventSetupModule = ({ onBack, user, showToast }) => {
+const PlanningModule = ({ user, showToast }) => {
+  const [tab, setTab] = useState('events');
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between pb-0">
+          <div className="pb-4">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Planning</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Manage your sports day events and trial sessions</p>
+          </div>
+        </div>
+        <div className="flex gap-1 -mb-px">
+          {[['events', 'Events', Settings], ['trials', 'Trials', ClipboardList]].map(([id, label, Icon]) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${tab === id ? 'border-sky-500 text-sky-600 dark:text-sky-400' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>
+              <Icon size={15}/>{label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'events' && <EventSetupModule user={user} showToast={showToast} embedded/>}
+      {tab === 'trials' && <TrialSetupModule user={user} showToast={showToast} embedded/>}
+    </div>
+  );
+};
+
+const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const [events, setEvents]               = useState([]);
   const [schoolRecords, setSchoolRecords] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState('new');
@@ -834,6 +862,12 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
   const [newActivity, setNewActivity] = useState({ name: '', type: 'track', scoringType: 'metric', ageGroup: 'U14', gender: 'Boys', participantsPerHouse: 2, recordValue: '', recordHolder: '' });
   const [isSaving, setIsSaving]   = useState(false);
   const [modalConfig, setModalConfig] = useState({ isOpen: false, item: null, type: null, payload: null });
+  const [eventIsLocked, setEventIsLocked] = useState(false);
+  const [staffSeeAll, setStaffSeeAll] = useState(true);
+  const [staffList, setStaffList] = useState([]);
+  const [assignments, setAssignments] = useState({});
+  const [lockConfirm, setLockConfirm] = useState(false);
+  const [openAssignDropdown, setOpenAssignDropdown] = useState(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -844,6 +878,8 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
         const { data: rData } = await supabase.from('event_records').select('*').eq('school_id', user.school_id);
         setSchoolRecords(rData || []);
         setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase());
+        const { data: sData } = await supabase.from('users').select('id, first_name, last_name').eq('school_id', user.school_id).eq('role', 'staff');
+        setStaffList(sData || []);
       } catch (err) { console.error('Error fetching data:', err); } finally { setIsLoading(false); }
     };
     fetchAll();
@@ -859,10 +895,19 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
     const evt = events.find(e => e.id === eventId);
     if (!evt) return;
     setEventName(evt.name); setEventDate(evt.event_date); setParentCode(evt.parent_access_code); setEventIsActive(evt.is_active ?? true);
+    setEventIsLocked(evt.is_locked ?? false);
+    setStaffSeeAll(evt.staff_see_all ?? true);
     setIsLoading(true);
     try {
       const { data, error } = await supabase.from('event_activities').select('*').eq('event_id', eventId);
       if (error) throw error;
+      const { data: aData } = await supabase.from('activity_assignments').select('event_activity_id, staff_id').eq('school_id', user.school_id);
+      const map = {};
+      (aData || []).forEach(a => {
+        if (!map[a.event_activity_id]) map[a.event_activity_id] = [];
+        map[a.event_activity_id].push(a.staff_id);
+      });
+      setAssignments(map);
       setActivities((data || []).map(a => {
         const rec = schoolRecords.find(r =>
           normalizeString(r.activity_name) === normalizeString(a.name) &&
@@ -939,6 +984,32 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
     setModalConfig({ isOpen: false, item: null, type: null, payload: null });
   };
 
+  const handleToggleLock = async () => {
+    const next = !eventIsLocked;
+    setEventIsLocked(next);
+    setLockConfirm(false);
+    await supabase.from('events').update({ is_locked: next }).eq('id', selectedEventId);
+    showToast(next ? 'Event locked — staff cannot save new scores' : 'Event unlocked');
+  };
+
+  const handleToggleStaffSeeAll = async () => {
+    const next = !staffSeeAll;
+    setStaffSeeAll(next);
+    await supabase.from('events').update({ staff_see_all: next }).eq('id', selectedEventId);
+  };
+
+  const handleToggleAssignment = async (activityId, staffId) => {
+    const current = assignments[activityId] || [];
+    const isAssigned = current.includes(staffId);
+    const next = isAssigned ? current.filter(id => id !== staffId) : [...current, staffId];
+    setAssignments(prev => ({ ...prev, [activityId]: next }));
+    if (isAssigned) {
+      await supabase.from('activity_assignments').delete().eq('event_activity_id', activityId).eq('staff_id', staffId);
+    } else {
+      await supabase.from('activity_assignments').insert({ event_activity_id: activityId, staff_id: staffId, school_id: user.school_id });
+    }
+  };
+
   const handleSaveEvent = async () => {
     if (!eventName || !eventDate) { showToast('Please provide an event name and date.', 'error'); return; }
     setIsSaving(true);
@@ -972,7 +1043,7 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
       }
 
       showToast('Event saved successfully!');
-      onBack();
+      if (!embedded && onBack) onBack();
     } catch (err) { showToast('Failed to save the event. ' + (err.message || ''), 'error'); } finally { setIsSaving(false); }
   };
 
@@ -984,19 +1055,50 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
         message={modalConfig.type === 'event' ? `Delete "${eventName}"? This will permanently erase ALL activities and results recorded for this event. This cannot be undone.` : modalConfig.type === 'preset' ? `This will auto-generate standard ${modalConfig.payload} School events based on your gender settings.\n\nContinue?` : 'Are you sure? This will delete this activity and any results recorded for it.'}
         onConfirm={executeAction} onCancel={() => setModalConfig({ isOpen: false, item: null, type: null, payload: null })}
       />
+      <ConfirmModal
+        isOpen={lockConfirm}
+        title={eventIsLocked ? 'Unlock Event' : 'Lock Event'}
+        message={eventIsLocked ? 'Unlock this event? Staff will be able to enter and edit scores again.' : 'Lock this event? Staff will not be able to save any new scores until you unlock it.'}
+        confirmText={eventIsLocked ? 'Unlock' : 'Lock'}
+        onConfirm={handleToggleLock}
+        onCancel={() => setLockConfirm(false)}
+      />
 
+      {!embedded && (
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
         <div className="flex items-center gap-4">
           <Button onClick={onBack} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
           <div><h2 className="text-xl font-bold text-slate-900">Event Manager</h2><p className="text-sm text-slate-500">Create new events or edit existing ones.</p></div>
         </div>
         <div className="flex gap-2">
+          {selectedEventId !== 'new' && (
+            <button onClick={() => setLockConfirm(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+              {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
+            </button>
+          )}
           {selectedEventId !== 'new' && <Button onClick={() => setModalConfig({ isOpen: true, item: selectedEventId, type: 'event' })} variant="danger" disabled={isSaving}><Trash2 size={18}/></Button>}
           <Button onClick={handleSaveEvent} variant="success" disabled={isSaving}>
             {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : selectedEventId === 'new' ? 'Create Event' : 'Update Event'}
           </Button>
         </div>
       </div>
+      )}
+
+      {embedded && (
+        <div className="flex items-center justify-end gap-2 pb-2">
+          {selectedEventId !== 'new' && (
+            <button onClick={() => setLockConfirm(true)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+              {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
+            </button>
+          )}
+          {selectedEventId !== 'new' && <Button onClick={() => setModalConfig({ isOpen: true, item: selectedEventId, type: 'event' })} variant="danger" disabled={isSaving}><Trash2 size={18}/></Button>}
+          <Button onClick={handleSaveEvent} variant="success" disabled={isSaving}>
+            {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : selectedEventId === 'new' ? 'Create Event' : 'Update Event'}
+          </Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="space-y-6 lg:col-span-1">
@@ -1019,13 +1121,37 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
               <div><label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date</label><input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-sky-400 outline-none bg-white dark:bg-slate-700 dark:text-white"/></div>
               <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${eventIsActive ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 dark:border-emerald-700' : 'border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-700/30'}`}>
                 <div>
-                  <p className="text-sm font-semibold text-slate-800">{eventIsActive ? '🟢 Event is Live' : '🔴 Event is Archived'}</p>
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{eventIsActive ? '🟢 Event is Live' : '🔴 Event is Archived'}</p>
                   <p className="text-xs text-slate-500 mt-0.5">{eventIsActive ? 'Parent portal is open — parents can view live results.' : 'Parent portal is closed. Results are locked.'}</p>
                 </div>
                 <button type="button" onClick={() => setEventIsActive(p => !p)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${eventIsActive ? 'bg-emerald-500' : 'bg-slate-300'}`}>
                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${eventIsActive ? 'translate-x-6' : 'translate-x-1'}`}/>
                 </button>
               </div>
+
+              {selectedEventId !== 'new' && (
+                <>
+                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">{eventIsLocked ? <Lock size={14} className="text-amber-500"/> : <Unlock size={14} className="text-slate-400"/>} {eventIsLocked ? 'Scoring Locked' : 'Scoring Open'}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{eventIsLocked ? 'Staff cannot save new scores.' : 'Staff can enter and save scores.'}</p>
+                    </div>
+                    <button type="button" onClick={() => setLockConfirm(true)} className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400' : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 hover:border-amber-300'}`}>
+                      {eventIsLocked ? 'Unlock' : 'Lock'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Show all activities to staff</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{staffSeeAll ? 'All staff see all activities.' : 'Assign specific activities to each staff member below.'}</p>
+                    </div>
+                    <button type="button" onClick={handleToggleStaffSeeAll} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${staffSeeAll ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${staffSeeAll ? 'translate-x-6' : 'translate-x-1'}`}/>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </Card>
 
@@ -1109,6 +1235,39 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
                           <span className="font-semibold">{act.ageGroup}</span> · <span className={act.gender === 'Boys' ? 'text-blue-500' : act.gender === 'Girls' ? 'text-pink-500' : 'text-purple-500'}>{act.gender}</span> · {act.participantsPerHouse || 2} per house
                           {act.recordValue && <span className="ml-1 text-amber-600 dark:text-amber-400"> · 🏆 {act.recordValue}</span>}
                         </p>
+                        {!staffSeeAll && selectedEventId !== 'new' && !act.id.startsWith('temp-') && (
+                          <div className="mt-2 flex flex-wrap gap-1 items-center">
+                            {(assignments[act.id] || []).map(sid => {
+                              const s = staffList.find(st => st.id === sid);
+                              if (!s) return null;
+                              return (
+                                <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
+                                  {s.first_name[0]}{s.last_name[0]} <X size={10}/>
+                                </button>
+                              );
+                            })}
+                            <div className="relative">
+                              <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
+                                className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
+                                <Plus size={12}/>
+                              </button>
+                              {openAssignDropdown === act.id && (
+                                <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[140px] py-1">
+                                  {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
+                                    <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
+                                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
+                                      {s.first_name} {s.last_name}
+                                    </button>
+                                  ))}
+                                  {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
+                                    <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 flex-shrink-0 transition-colors"><Trash2 size={16}/></button>
                     </div>
@@ -1118,7 +1277,14 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
                 <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg max-h-[500px] overflow-y-auto">
                   <table className="w-full text-sm text-left">
                     <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
-                      <tr><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Activity</th><th className="px-4 py-3 font-semibold text-center">Kids/House</th><th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th><th className="px-4 py-3 text-right font-semibold">Action</th></tr>
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Group</th>
+                        <th className="px-4 py-3 font-semibold">Activity</th>
+                        <th className="px-4 py-3 font-semibold text-center">Kids/House</th>
+                        <th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th>
+                        {!staffSeeAll && selectedEventId !== 'new' && <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300">Assigned Staff</th>}
+                        <th className="px-4 py-3 text-right font-semibold">Action</th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                       {activities.map(act => (
@@ -1127,6 +1293,44 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
                           <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
                           <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
                           <td className="px-4 py-3"><div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity focus-within:opacity-100"><input type="number" step="0.01" value={act.recordValue || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordValue', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Val" className="record-input w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/><input type="text" value={act.recordHolder || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordHolder', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Holder Name" className="record-input w-32 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/></div></td>
+                          {!staffSeeAll && selectedEventId !== 'new' && (
+                            <td className="px-4 py-3">
+                              {!act.id.startsWith('temp-') ? (
+                                <div className="flex flex-wrap gap-1 items-center">
+                                  {(assignments[act.id] || []).map(sid => {
+                                    const s = staffList.find(st => st.id === sid);
+                                    if (!s) return null;
+                                    return (
+                                      <button key={sid} onClick={() => handleToggleAssignment(act.id, sid)}
+                                        title={`${s.first_name} ${s.last_name} — click to remove`}
+                                        className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300 text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/30 hover:text-red-600 transition-colors">
+                                        {s.first_name[0]}{s.last_name[0]} <X size={9}/>
+                                      </button>
+                                    );
+                                  })}
+                                  <div className="relative">
+                                    <button onClick={() => setOpenAssignDropdown(openAssignDropdown === act.id ? null : act.id)}
+                                      className="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-300 text-xs font-bold hover:bg-sky-200 dark:hover:bg-sky-800 transition-colors flex items-center justify-center">
+                                      <Plus size={12}/>
+                                    </button>
+                                    {openAssignDropdown === act.id && (
+                                      <div className="absolute left-0 top-7 z-20 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg min-w-[160px] py-1">
+                                        {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).map(s => (
+                                          <button key={s.id} onClick={() => { handleToggleAssignment(act.id, s.id); setOpenAssignDropdown(null); }}
+                                            className="w-full text-left px-3 py-1.5 text-xs hover:bg-sky-50 dark:hover:bg-sky-900/30 text-slate-700 dark:text-slate-300">
+                                            {s.first_name} {s.last_name}
+                                          </button>
+                                        ))}
+                                        {staffList.filter(s => !(assignments[act.id] || []).includes(s.id)).length === 0 && (
+                                          <p className="px-3 py-1.5 text-xs text-slate-400">All staff assigned</p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : <span className="text-xs text-slate-400 italic">Save event first</span>}
+                            </td>
+                          )}
                           <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
                         </tr>
                       ))}
@@ -1146,7 +1350,7 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
 // 7. TRIAL SETUP MODULE
 // ==========================================
 
-const TrialSetupModule = ({ onBack, user, showToast }) => {
+const TrialSetupModule = ({ onBack, user, showToast, embedded }) => {
   const [trials, setTrials]           = useState([]);
   const [selectedTrialId, setSelectedTrialId] = useState('new');
   const [isLoading, setIsLoading]     = useState(true);
@@ -1181,7 +1385,8 @@ const TrialSetupModule = ({ onBack, user, showToast }) => {
       if (error) throw error;
       setModalConfig({ isOpen: false, item: null });
       showToast('Trial deleted successfully.');
-      onBack();
+      if (!embedded && onBack) onBack();
+      else { setSelectedTrialId('new'); setTrialName(''); setTrialDate(''); }
     } catch (e) { showToast('Failed to delete trial.', 'error'); } finally { setIsSaving(false); }
   };
 
@@ -1197,19 +1402,21 @@ const TrialSetupModule = ({ onBack, user, showToast }) => {
         if (error) throw error;
       }
       showToast('Trial setup saved!');
-      onBack();
+      if (!embedded && onBack) onBack();
     } catch (e) { showToast('Failed to save trial.', 'error'); } finally { setIsSaving(false); }
   };
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <ConfirmModal isOpen={modalConfig.isOpen} title="Delete Trial" message={`Delete "${trialName}" and all associated results? This cannot be undone.`} onConfirm={executeDelete} onCancel={() => setModalConfig({ isOpen: false, item: null })}/>
-      <div className="flex items-center justify-between border-b border-slate-200 pb-4">
-        <div className="flex items-center gap-4">
-          <Button onClick={onBack} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
-          <div><h2 className="text-xl font-bold text-slate-900">Manage Trials</h2><p className="text-sm text-slate-500">Create buckets for PE assessments and practice data.</p></div>
+      {!embedded && (
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-4">
+            <Button onClick={onBack} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
+            <div><h2 className="text-xl font-bold text-slate-900">Manage Trials</h2><p className="text-sm text-slate-500">Create buckets for PE assessments and practice data.</p></div>
+          </div>
         </div>
-      </div>
+      )}
       <Card className="bg-purple-50 border-purple-200">
         <label className="block text-sm font-semibold text-purple-900 mb-2">Select Trial Action</label>
         <div className="relative">
@@ -1829,8 +2036,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   }, [user, currentView]);
 
   if (currentView === 'import')      return <DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
-  if (currentView === 'event-setup') return <EventSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
-  if (currentView === 'trial-setup') return <TrialSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
+  if (currentView === 'planning') return <PlanningModule user={user} showToast={showToast}/>;
   if (currentView === 'students')    return <StudentDirectoryModule user={user} showToast={showToast}/>;
   if (currentView === 'standings')   return <LiveStandingsModule user={user}/>;
   if (currentView === 'houses')      return <HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
@@ -1841,7 +2047,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
     { label: 'Add staff accounts',    desc: 'Give staff login access to enter results',   view: 'students',    done: staffCount > 0,  icon: UserPlus },
     { label: 'Import class lists',    desc: 'Upload your student CSV to get started',      view: 'import',      done: studentCount > 0, icon: Users },
     { label: 'Set up houses',         desc: 'Assign colours to your school houses',        view: 'houses',      done: houseCount > 0,  icon: Palette },
-    { label: 'Create an event',       desc: 'Build your sports day with activities',       view: 'event-setup', done: eventCount > 0,  icon: Calendar },
+    { label: 'Create an event',       desc: 'Build your sports day with activities',       view: 'planning', done: eventCount > 0,  icon: Calendar },
   ];
   const setupDone = setupSteps.filter(s => s.done).length;
   const allDone   = setupDone === setupSteps.length;
@@ -1911,7 +2117,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
           <div className={`grid gap-3 ${allDone ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2'}`}>
             {[
               { label: 'Upload Class Lists', icon: Users,     view: 'import'      },
-              { label: 'Manage Events',      icon: Settings,  view: 'event-setup' },
+              { label: 'Manage Events',      icon: Settings,  view: 'planning' },
               { label: 'Manage Houses',      icon: Palette,   view: 'houses'      },
               { label: 'Live Standings',     icon: Trophy,    view: 'standings'   },
             ].map(({ label, icon: Icon, view }) => (
@@ -2000,7 +2206,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   useEffect(() => {
     const fetchContexts = async () => {
       try {
-        const { data: eData } = await supabase.from('events').select('id, name, event_date, is_active').eq('school_id', user.school_id).order('event_date', { ascending: false });
+        const { data: eData } = await supabase.from('events').select('id, name, event_date, is_active, is_locked, staff_see_all').eq('school_id', user.school_id).order('event_date', { ascending: false });
         if (eData && eData.length > 0) {
           setAllEvents(eData);
           const saved = localStorage.getItem('sdp-staff-event');
@@ -2033,8 +2239,15 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       try {
         const { data, error } = await supabase.from('event_activities').select('*').eq('event_id', selectedEventId);
         if (error) throw error;
-        setAssignedActivities(data || []);
-        await refreshResultCounts(data || []);
+        let visible = data || [];
+        const eventMeta = allEvents.find(e => e.id === selectedEventId);
+        if (eventMeta && !eventMeta.staff_see_all) {
+          const { data: assignData } = await supabase.from('activity_assignments').select('event_activity_id').eq('staff_id', user.id);
+          const assignedIds = new Set((assignData || []).map(a => a.event_activity_id));
+          visible = visible.filter(a => assignedIds.has(a.id));
+        }
+        setAssignedActivities(visible);
+        await refreshResultCounts(visible);
       } catch (e) { console.error(e); showToast('Failed to load activities', 'error'); } finally { setIsLoading(false); }
     };
     fetchActivities();
@@ -2158,7 +2371,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   const isDone      = resultCount > 0;
                   return (
                     <div key={activity.id}
-                      onClick={() => onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2 })}
+                      onClick={() => { const evtMeta = allEvents.find(e => e.id === selectedEventId); onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked: evtMeta?.is_locked ?? false }); }}
                       className={`rounded-xl shadow-sm border p-5 cursor-pointer hover:shadow-md transition-all group relative overflow-hidden flex flex-col justify-between ${isDone ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-sky-400'}`}>
                       <div className={`absolute top-0 left-0 w-1 h-full ${isDone ? 'bg-emerald-500' : activity.activity_type === 'track' ? 'bg-sky-500' : activity.activity_type === 'field' ? 'bg-amber-500' : 'bg-purple-500'}`}/>
                       <div>
@@ -2321,6 +2534,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
 // --- STAFF DASHBOARD: SCORING VIEW ---
 const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecords, onClose, refreshRecords }) => {
   const isTrial = activity.isTrial;
+  const isLocked = !isTrial && (activity.isLocked ?? false);
 
   const [studentRoster, setStudentRoster]   = useState([]);
   const [scores, setScores]                 = useState({});
@@ -2767,9 +2981,12 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               </div>
             )}
           </div>
-          <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0}>
-            {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> Save{heatSize !== 'All' ? ` Heat ${activeHeat}` : ''}</>}
-          </Button>
+          <div className="flex flex-col items-end gap-1">
+            {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Event locked by organiser</span>}
+            <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked}>
+              {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> Save{heatSize !== 'All' ? ` Heat ${activeHeat}` : ''}</>}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -3018,10 +3235,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             ? <span>{savedHeats.size}/{heatKeys.length} heats done · Heat {activeHeat}</span>
             : <span>{Object.values(scores).filter(v => v !== '' && v != null).length} / {studentRoster.length} scored</span>}
         </div>
-        <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0} className="!py-2.5 !px-5">
-          {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-          {isSaving ? 'Saving...' : heatSize !== 'All' ? `Save Heat ${activeHeat}` : 'Save All'}
-        </Button>
+        <div className="flex flex-col items-end gap-1">
+          {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Locked by organiser</span>}
+          <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked} className="!py-2.5 !px-5">
+            {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
+            {isSaving ? 'Saving...' : heatSize !== 'All' ? `Save Heat ${activeHeat}` : 'Save All'}
+          </Button>
+        </div>
       </div>
       {/* Bottom padding so sticky bar doesn't overlap content on mobile */}
       <div className="h-20 md:hidden"/>
@@ -4124,8 +4344,7 @@ const LoginView = ({ onLogin, onNavigate }) => {
 // Shared nav item list to avoid duplication between desktop sidebar and mobile drawer
 const ORGANISER_NAV = [
   { view: 'dashboard',   icon: Activity,      label: 'Dashboard'      },
-  { view: 'event-setup', icon: Settings,      label: 'Events'         },
-  { view: 'trial-setup', icon: ClipboardList, label: 'Trials'         },
+  { view: 'planning', icon: ClipboardList, label: 'Planning' },
   { view: 'students',    icon: Users,         label: 'Directory'      },
   { view: 'houses',      icon: Palette,       label: 'Houses'         },
   { view: 'standings',   icon: Trophy,        label: 'Live Standings' },
@@ -4136,8 +4355,7 @@ const ORGANISER_NAV = [
 // Hash routing — maps URL hash ↔ app route/view
 const VIEW_TO_HASH = {
   'dashboard':   '#/organiser',
-  'event-setup': '#/organiser/events',
-  'trial-setup': '#/organiser/trials',
+  'planning': '#/organiser/planning',
   'students':    '#/organiser/directory',
   'houses':      '#/organiser/houses',
   'standings':   '#/organiser/standings',
@@ -4146,8 +4364,7 @@ const VIEW_TO_HASH = {
 };
 const HASH_TO_NAV = {
   '#/organiser':           { route: 'organiser-dashboard', view: 'dashboard'   },
-  '#/organiser/events':    { route: 'organiser-dashboard', view: 'event-setup' },
-  '#/organiser/trials':    { route: 'organiser-dashboard', view: 'trial-setup' },
+  '#/organiser/planning':  { route: 'organiser-dashboard', view: 'planning' },
   '#/organiser/directory': { route: 'organiser-dashboard', view: 'students'    },
   '#/organiser/houses':    { route: 'organiser-dashboard', view: 'houses'      },
   '#/organiser/standings': { route: 'organiser-dashboard', view: 'standings'   },
