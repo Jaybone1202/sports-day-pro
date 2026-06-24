@@ -2272,9 +2272,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         } else setStudentRoster(filtered);
 
       } else {
-        const { data: absentees } = await supabase.from('event_absences').select('student_id').eq('event_activity_id', activity.id);
-        const absentIds = (absentees || []).map(a => a.student_id);
-        setEventAbsentees(absentIds);
+        const { data: absentees } = await supabase.from('event_absences').select('student_id, absence_status').eq('event_activity_id', activity.id);
+        const absentList = (absentees || []).map(a => ({ id: a.student_id, status: a.absence_status || 'DNS' }));
+        setEventAbsentees(absentList);
+        const absentIds = absentList.map(a => a.id);
 
         let sQuery = supabase.from('students').select('*').eq('school_id', user.school_id)
           .eq('age_group', (activity.ageGroup||'').replace(' (Open)','').trim());
@@ -2329,7 +2330,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
   useEffect(() => {
     if (isTrial || eventAbsentees.length === 0) return;
-    const unknown = eventAbsentees.filter(id => !kickedNamesCache[id]);
+    const unknown = eventAbsentees.filter(a => !kickedNamesCache[a.id]).map(a => a.id);
     if (unknown.length === 0) return;
     supabase.from('students').select('id, first_name, last_name').in('id', unknown).then(({ data }) => {
       if (data) {
@@ -2411,27 +2412,27 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     else e.target.blur();
   };
 
-  const executeKick = async () => {
+  const executeKick = async (status = 'DNS') => {
     const studentId = modalConfig.payload;
     setModalConfig({ isOpen: false, type: null, payload: null });
     try {
       const { data: existing } = await supabase.from('event_absences').select('id').eq('event_activity_id', activity.id).eq('student_id', studentId).maybeSingle();
       let kickErr;
-      if (existing) ({ error: kickErr } = await supabase.from('event_absences').update({ is_absent: true }).eq('id', existing.id));
-      else          ({ error: kickErr } = await supabase.from('event_absences').insert({ event_activity_id: activity.id, student_id: studentId, is_absent: true }));
+      if (existing) ({ error: kickErr } = await supabase.from('event_absences').update({ is_absent: true, absence_status: status }).eq('id', existing.id));
+      else          ({ error: kickErr } = await supabase.from('event_absences').insert({ event_activity_id: activity.id, student_id: studentId, is_absent: true, absence_status: status }));
       if (kickErr) throw kickErr;
       setStudentRoster(prev => prev.filter(s => s.id !== studentId));
-      setEventAbsentees(prev => [...prev, studentId]);
-      showToast('Student removed from roster.');
+      setEventAbsentees(prev => [...prev, { id: studentId, status }]);
+      showToast(`Marked as ${status}.`);
       fetchRoster(true);
-    } catch (e) { showToast("Database error during kick. Ensure 'event_absences' table exists.", 'error'); }
+    } catch (e) { showToast("Database error. Ensure 'event_absences' table exists.", 'error'); }
   };
 
   const executeUndoKick = async (studentId) => {
     try {
       const { error } = await supabase.from('event_absences').delete().eq('event_activity_id', activity.id).eq('student_id', studentId);
       if (error) throw error;
-      setEventAbsentees(prev => prev.filter(id => id !== studentId));
+      setEventAbsentees(prev => prev.filter(a => a.id !== studentId));
       showToast('Student restored to roster.');
       fetchRoster(true);
     } catch (e) { showToast('Failed to restore student.', 'error'); }
@@ -2542,7 +2543,29 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
   return (
     <div className="space-y-6 relative">
-      <ConfirmModal isOpen={modalConfig.isOpen && modalConfig.type === 'kick'} title="Remove Finalist" message="Remove this student? This will permanently replace them with the next best trial student for their house." onConfirm={executeKick} onCancel={() => setModalConfig({ isOpen: false, type: null, payload: null })}/>
+      {/* DNF/DNS/DQ status picker */}
+      {modalConfig.isOpen && modalConfig.type === 'kick' && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-xs w-full border border-slate-200 dark:border-slate-700 p-6">
+            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">Mark Student Out</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-5">Choose a reason for removing this student from the roster.</p>
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {[['DNS','Did Not Start','slate'],['DNF','Did Not Finish','amber'],['DQ','Disqualified','purple']].map(([code, label, color]) => (
+                <button key={code} onClick={() => executeKick(code)}
+                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 font-bold transition-colors
+                    ${color === 'slate' ? 'border-slate-300 hover:border-slate-500 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200' :
+                      color === 'amber' ? 'border-amber-300 hover:border-amber-500 hover:bg-amber-50 dark:border-amber-700 dark:hover:bg-amber-900/20 text-amber-700 dark:text-amber-300' :
+                      'border-purple-300 hover:border-purple-500 hover:bg-purple-50 dark:border-purple-700 dark:hover:bg-purple-900/20 text-purple-700 dark:text-purple-300'}`}>
+                  <span className="text-lg font-black">{code}</span>
+                  <span className="text-[10px] font-semibold text-center leading-tight opacity-70">{label}</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => setModalConfig({ isOpen: false, type: null, payload: null })}
+              className="w-full py-2 text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium">Cancel</button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200 pb-4 gap-4">
         <div className="flex items-center gap-4">
@@ -2653,9 +2676,63 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         ) : (
           <>
             {isRefreshingRoster && <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] flex items-center justify-center z-20"><Loader2 className="animate-spin text-blue-600" size={32}/></div>}
-            <div className="overflow-x-auto">
+            {/* ── MOBILE card layout (hidden on md+) ── */}
+            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+              {studentRoster.length === 0 ? (
+                <p className="text-center py-12 text-slate-500 text-sm">{!isTrial ? 'No students qualify.' : 'No students found.'}</p>
+              ) : (
+                (heatSize !== 'All' ? [String(activeHeat)] : heatKeys).map(heatNum =>
+                  groupedRoster[heatNum].map((student, index) => {
+                    const vIdx = orderedStudents.findIndex(s => s.id === student.id);
+                    const nextId = orderedStudents[vIdx + 1]?.id;
+                    return (
+                      <div key={student.id} className="flex items-center gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{student.first_name} {student.last_name}</p>
+                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 flex items-center gap-1.5">
+                            <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${getHouseColor(student.house, houseColors)}`}/>
+                            {student.house || 'Unassigned'} · {student.class}
+                            {!isTrial && student.best_trial_score != null && <span className="ml-1 text-amber-600 font-mono">Trial: {student.best_trial_score}</span>}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {isPlacingMode ? (
+                            <div className="flex gap-1 flex-wrap justify-end max-w-[180px]">
+                              {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => (
+                                <button key={label} onClick={() => handleScoreChange(student.id, idx + 1)}
+                                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-colors touch-manipulation ${scores[student.id] == idx + 1 ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                  {label}
+                                </button>
+                              ))}
+                              {scores[student.id] && <button onClick={() => handleScoreChange(student.id, '')} className="px-1.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 touch-manipulation">✕</button>}
+                            </div>
+                          ) : (
+                            <input
+                              id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
+                              value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
+                              onChange={(e) => handleScoreChange(student.id, e.target.value)}
+                              onKeyDown={(e) => handleKeyDown(e, nextId)}
+                              className="w-24 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          )}
+                          {!isTrial && (
+                            <button onClick={() => setModalConfig({ isOpen: true, type: 'kick', payload: student.id })}
+                              className="p-1.5 text-slate-300 hover:text-red-500 transition-colors touch-manipulation">
+                              <UserMinus size={16}/>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              )}
+            </div>
+
+            {/* ── DESKTOP table layout (hidden on mobile) ── */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-100 text-slate-600 border-b border-slate-200">
+                <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600">
                   <tr>
                     {heatSize !== 'All' && <th className="px-4 py-3 font-semibold w-16 text-center">Heat</th>}
                     <SortableHeader label="Student Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/>
@@ -2667,13 +2744,12 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                     {!isTrial && <th className="px-4 py-3 w-12"></th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {studentRoster.length === 0 ? (
                     <tr><td colSpan={10} className="text-center py-12 text-slate-500">{!isTrial ? 'No students qualify. Ensure trial data exists for this age group and activity name.' : 'No students found matching this criteria.'}</td></tr>
                   ) : (
                     (heatSize !== 'All' ? [String(activeHeat)] : heatKeys).map(heatNum => (
                       <React.Fragment key={`heat-${heatNum}`}>
-                        {heatSize === 'All' && false && <tr className="bg-blue-50/50"><td colSpan={10} className="px-4 py-2 font-bold text-blue-800 border-y border-blue-100">Heat {heatNum}</td></tr>}
                         {groupedRoster[heatNum].map((student, index) => {
                           const vIdx = orderedStudents.findIndex(s => s.id === student.id);
                           const nextId = orderedStudents[vIdx + 1]?.id;
@@ -2685,10 +2761,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                           if (heatSize === 'All' && index === 0 && !['last_name','first_name'].includes(sortConfig.key)) { showSep = true; sepLabel = student[sortConfig.key]; }
                           return (
                             <React.Fragment key={student.id}>
-                              {showSep && <tr className="bg-slate-100/80"><td colSpan={10} className="px-4 py-1.5 font-bold text-slate-700 text-xs uppercase tracking-wider border-y border-slate-200">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
-                              <tr className="hover:bg-slate-50 transition-colors group/row">
+                              {showSep && <tr className="bg-slate-100/80 dark:bg-slate-700/40"><td colSpan={10} className="px-4 py-1.5 font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider border-y border-slate-200 dark:border-slate-600">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
+                              <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group/row">
                                 {heatSize !== 'All' && (
-                                  <td className="px-4 py-2 align-middle border-r border-slate-100">
+                                  <td className="px-4 py-2 align-middle border-r border-slate-100 dark:border-slate-700">
                                     <div className="flex flex-col items-center justify-center">
                                       <button onClick={() => moveStudentHeat(student.id, -1)} className="text-slate-300 hover:text-blue-600 p-0.5"><ChevronUp size={16}/></button>
                                       <span className="font-bold text-slate-500 text-xs">{manualHeats[student.id] || 1}</span>
@@ -2696,17 +2772,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                     </div>
                                   </td>
                                 )}
-                                <td className="px-4 py-3 font-medium text-slate-900">{student.last_name}, {student.first_name}</td>
-                                <td className="px-4 py-3 text-slate-700 font-medium">{student.class}</td>
-                                {isTrial && <td className="px-4 py-3 text-slate-600 text-sm">{student.age_group}</td>}
-                                <td className="px-4 py-3 text-slate-500"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
+                                <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{student.last_name}, {student.first_name}</td>
+                                <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-medium">{student.class}</td>
+                                {isTrial && <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{student.age_group}</td>}
+                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
                                 {!isTrial && <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">{student.best_trial_score ?? '--'}</td>}
                                 <td className="px-4 py-3 text-right">
                                   {isPlacingMode ? (
                                     <div className="flex gap-1.5 flex-wrap justify-end">
                                       {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => (
                                         <button key={label} onClick={() => handleScoreChange(student.id, idx + 1)}
-                                          className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors touch-manipulation ${scores[student.id] == idx + 1 ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300'}`}>
+                                          className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors touch-manipulation ${scores[student.id] == idx + 1 ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
                                           {label}
                                         </button>
                                       ))}
@@ -2720,13 +2796,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                       value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
                                       onChange={(e) => handleScoreChange(student.id, e.target.value)}
                                       onKeyDown={(e) => handleKeyDown(e, nextId)}
-                                      className="w-full px-3 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 focus:bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      className="w-full px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                     />
                                   )}
                                 </td>
                                 {!isTrial && (
                                   <td className="px-4 py-3">
-                                    <button onClick={() => setModalConfig({ isOpen: true, type: 'kick', payload: student.id })} title="Remove Absent Student" className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100">
+                                    <button onClick={() => setModalConfig({ isOpen: true, type: 'kick', payload: student.id })} title="Mark DNS/DNF/DQ" className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100">
                                       <UserMinus size={18}/>
                                     </button>
                                   </td>
@@ -2742,13 +2818,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               </table>
             </div>
             {!isTrial && eventAbsentees.length > 0 && (
-              <div className="bg-red-50 border-t border-red-100 p-3 text-xs flex flex-wrap gap-2 items-center">
-                <span className="font-bold text-red-800">Excluded:</span>
-                {eventAbsentees.map(id => {
+              <div className="bg-red-50 dark:bg-red-900/20 border-t border-red-100 dark:border-red-900/40 p-3 text-xs flex flex-wrap gap-2 items-center">
+                <span className="font-bold text-red-800 dark:text-red-300">Excluded:</span>
+                {eventAbsentees.map(({ id, status }) => {
                   const s = kickedNamesCache[id] || { first_name: 'Unknown', last_name: 'Student' };
+                  const statusColor = status === 'DQ' ? 'text-purple-600 border-purple-200 bg-white' : status === 'DNF' ? 'text-amber-600 border-amber-200 bg-white' : 'text-red-600 border-red-200 bg-white';
                   return (
-                    <button key={id} onClick={() => executeUndoKick(id)} className="flex items-center gap-1 bg-white border border-red-200 text-red-600 px-2 py-1 rounded hover:bg-red-100 transition-colors" title="Undo Exclusion">
-                      <UserPlus size={12}/> Restore {s.first_name} {s.last_name.charAt(0) ? s.last_name.charAt(0)+'.' : ''}
+                    <button key={id} onClick={() => executeUndoKick(id)} className={`flex items-center gap-1 border px-2 py-1 rounded hover:opacity-80 transition-colors ${statusColor}`} title="Tap to restore">
+                      <UserPlus size={12}/> {s.first_name} {s.last_name.charAt(0) ? s.last_name.charAt(0)+'.' : ''} <span className="font-bold ml-0.5">· {status}</span>
                     </button>
                   );
                 })}
