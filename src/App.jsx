@@ -981,7 +981,7 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
       <ConfirmModal
         isOpen={modalConfig.isOpen}
         title={modalConfig.type === 'event' ? 'Delete Event' : modalConfig.type === 'preset' ? 'Apply Preset' : 'Delete Activity'}
-        message={modalConfig.type === 'event' ? `Are you absolutely sure you want to delete "${eventName}"?` : modalConfig.type === 'preset' ? `This will auto-generate standard ${modalConfig.payload} School events based on your gender settings.\n\nContinue?` : 'Are you sure? This will delete this activity.'}
+        message={modalConfig.type === 'event' ? `Delete "${eventName}"? This will permanently erase ALL activities and results recorded for this event. This cannot be undone.` : modalConfig.type === 'preset' ? `This will auto-generate standard ${modalConfig.payload} School events based on your gender settings.\n\nContinue?` : 'Are you sure? This will delete this activity and any results recorded for it.'}
         onConfirm={executeAction} onCancel={() => setModalConfig({ isOpen: false, item: null, type: null, payload: null })}
       />
 
@@ -1309,10 +1309,11 @@ const StudentDirectoryModule = ({ user, showToast }) => {
 
       // Restore organiser session so the INSERT runs with the correct auth.uid()
       if (organisersSession) {
-        await supabase.auth.setSession({
+        const { error: sessionErr } = await supabase.auth.setSession({
           access_token: organisersSession.access_token,
           refresh_token: organisersSession.refresh_token,
         });
+        if (sessionErr) throw new Error('Session restore failed — please refresh and try again.');
       }
 
       const { error: userErr } = await supabase.from('users').insert({
@@ -1544,7 +1545,7 @@ const LiveStandingsModule = ({ user }) => {
         setHouseColors(map);
         const { data } = await supabase.from('events').select('*').eq('school_id', user.school_id).order('created_at', { ascending: false });
         if (data && data.length > 0) { setEvents(data); setSelectedEventId(data[0].id); }
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error(e); showToast('Failed to load events', 'error'); }
     };
     fetchEventsAndColors();
   }, [user]);
@@ -1765,6 +1766,8 @@ const LiveStandingsModule = ({ user }) => {
 
 const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFlagsChange }) => {
   const [studentCount, setStudentCount] = useState(0);
+  const [staffCount, setStaffCount]     = useState(0);
+  const [houseCount, setHouseCount]     = useState(0);
   const [eventCount, setEventCount]     = useState(0);
   const [trialCount, setTrialCount]     = useState(0);
   const [isLoadingCount, setIsLoadingCount] = useState(true);
@@ -1774,12 +1777,14 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
       if (!user?.school_id) return;
       setIsLoadingCount(true);
       try {
-        const [{ count: sC }, { count: eC }, { count: tC }] = await Promise.all([
+        const [{ count: sC }, { count: eC }, { count: tC }, { count: stC }, { count: hC }] = await Promise.all([
           supabase.from('students').select('*', { count: 'exact', head: true }).eq('school_id', user.school_id),
           supabase.from('events').select('*', { count: 'exact', head: true }).eq('school_id', user.school_id),
           supabase.from('trials').select('*', { count: 'exact', head: true }).eq('school_id', user.school_id),
+          supabase.from('users').select('*', { count: 'exact', head: true }).eq('school_id', user.school_id).eq('role', 'staff'),
+          supabase.from('school_houses').select('*', { count: 'exact', head: true }).eq('school_id', user.school_id),
         ]);
-        setStudentCount(sC || 0); setEventCount(eC || 0); setTrialCount(tC || 0);
+        setStudentCount(sC || 0); setEventCount(eC || 0); setTrialCount(tC || 0); setStaffCount(stC || 0); setHouseCount(hC || 0);
       } catch (e) { console.error('Error fetching stats:', e); } finally { setIsLoadingCount(false); }
     };
     if (currentView === 'dashboard') fetchStats();
@@ -1795,9 +1800,9 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   if (currentView === 'flags')       return <FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/>;
 
   const setupSteps = [
-    { label: 'Add staff accounts',    desc: 'Give staff login access to enter results',   view: 'students',    done: false,          icon: UserPlus },
+    { label: 'Add staff accounts',    desc: 'Give staff login access to enter results',   view: 'students',    done: staffCount > 0,  icon: UserPlus },
     { label: 'Import class lists',    desc: 'Upload your student CSV to get started',      view: 'import',      done: studentCount > 0, icon: Users },
-    { label: 'Set up houses',         desc: 'Assign colours to your school houses',        view: 'houses',      done: false,          icon: Palette },
+    { label: 'Set up houses',         desc: 'Assign colours to your school houses',        view: 'houses',      done: houseCount > 0,  icon: Palette },
     { label: 'Create an event',       desc: 'Build your sports day with activities',       view: 'event-setup', done: eventCount > 0,  icon: Calendar },
   ];
   const setupDone = setupSteps.filter(s => s.done).length;
@@ -1967,7 +1972,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
         }
         const { data: tData } = await supabase.from('trials').select('id, name, trial_date').eq('school_id', user.school_id).order('trial_date', { ascending: false });
         if (tData && tData.length > 0) { setAllTrials(tData); setSelectedTrialId(tData[0].id); }
-      } catch (e) { console.error('Error fetching contexts:', e); }
+      } catch (e) { console.error('Error fetching contexts:', e); showToast('Failed to load events', 'error'); }
     };
     if (user?.school_id) fetchContexts();
   }, [user]);
@@ -1992,7 +1997,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
         if (error) throw error;
         setAssignedActivities(data || []);
         await refreshResultCounts(data || []);
-      } catch (e) { console.error(e); } finally { setIsLoading(false); }
+      } catch (e) { console.error(e); showToast('Failed to load activities', 'error'); } finally { setIsLoading(false); }
     };
     fetchActivities();
   }, [selectedEventId, mode, refreshResultCounts]);
@@ -2301,6 +2306,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [showFlagModal, setShowFlagModal]   = useState(false);
   const [flagType, setFlagType]             = useState('issue');
   const [flagMessage, setFlagMessage]       = useState('');
+  const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
 
   useEffect(() => {
     if (isTrial) { setCurrentRecord(null); return; }
@@ -2354,7 +2360,12 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
         let matchName = activity.name.trim();
         if (matchName.toLowerCase().endsWith('s') && matchName.length > 3) matchName = matchName.slice(0, -1);
-        const { data: trialResults } = await supabase.from('trial_results').select('*').ilike('activity_name', `%${matchName}%`);
+        // Scope to this school's trials only — prevents cross-school data leaking into roster
+        const { data: schoolTrials } = await supabase.from('trials').select('id').eq('school_id', user.school_id);
+        const schoolTrialIds = (schoolTrials || []).map(t => t.id);
+        const { data: trialResults } = schoolTrialIds.length > 0
+          ? await supabase.from('trial_results').select('*').ilike('activity_name', `%${matchName}%`).in('trial_id', schoolTrialIds)
+          : { data: [] };
 
         const studentsByHouse = {};
         (potential || []).forEach(student => {
@@ -2435,7 +2446,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     const newHeats = {};
     sorted.forEach((s, idx) => { newHeats[s.id] = Math.floor(idx / size) + 1; });
     setManualHeats(newHeats);
-  }, [studentRoster, heatSize]);
+  }, [studentRoster, heatSize, sortConfig]);
 
   const requestSort = (key) => {
     setSortConfig(prev => ({ key, direction: prev.key === key ? (prev.direction === 'asc' ? 'desc' : 'asc') : 'asc', secondaryKey: key === 'last_name' ? null : 'last_name' }));
@@ -2556,6 +2567,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
         if (recordBrokenBy) {
           rows.forEach(r => { if (r.student_id === recordBrokenBy) r.is_new_record = true; });
+          // Write the updated flag back to the DB — the first upsert saved it as false
+          await supabase.from('event_results').update({ is_new_record: true })
+            .eq('event_activity_id', activity.id).eq('student_id', recordBrokenBy);
           const breaker = studentRoster.find(s => s.id === recordBrokenBy);
           const newRecPayload = { school_id: user.school_id, activity_name: activity.name.trim(), age_group: (activity.ageGroup||'').replace(/[\s/\\-]/g,''), gender: activity.gender, record_value: newRecordValue, record_holder: `${breaker.first_name} ${breaker.last_name} (${breaker.house})` };
           await supabase.from('event_records').upsert(newRecPayload, { onConflict: 'school_id, activity_name, age_group, gender' });
@@ -2596,6 +2610,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   };
 
   const handleClose = () => {
+    const hasUnsaved = Object.values(scores).some(v => v !== '' && v !== null && v !== undefined);
+    if (hasUnsaved) { setShowUnsavedWarning(true); return; }
+    if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
+    onClose();
+  };
+  const confirmClose = () => {
+    setShowUnsavedWarning(false);
     if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
     onClose();
   };
@@ -2612,6 +2633,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
   return (
     <div className="space-y-6 relative">
+      <ConfirmModal
+        isOpen={showUnsavedWarning}
+        title="Unsaved Scores"
+        message="You have scores that haven't been saved yet. Leave anyway?"
+        confirmText="Leave"
+        onConfirm={confirmClose}
+        onCancel={() => setShowUnsavedWarning(false)}
+      />
       {/* DNF/DNS/DQ status picker */}
       {modalConfig.isOpen && modalConfig.type === 'kick' && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -2696,7 +2725,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       {heatSize !== 'All' && heatKeys.length > 1 && (
         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
           <button onClick={() => { if (activeHeat > 1) { setActiveHeat(h => h - 1); setScores({}); } }} disabled={activeHeat <= 1}
-            className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronLeft size={18}/></button>
+            className="p-2.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronLeft size={20}/></button>
           <div className="flex-1 flex items-center justify-center gap-2 flex-wrap">
             {heatKeys.map(h => {
               const num = parseInt(h);
@@ -2712,7 +2741,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             })}
           </div>
           <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { setActiveHeat(next); setScores({}); } }} disabled={!groupedRoster[activeHeat + 1]}
-            className="p-1.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronRight size={18}/></button>
+            className="p-2.5 rounded-lg hover:bg-slate-200 disabled:opacity-30 text-slate-600 transition-colors"><ChevronRight size={20}/></button>
 
           {/* Countdown timer */}
           <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-3">
@@ -2958,12 +2987,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 const ParentPortal = ({ onNavigate }) => {
   const [accessCode, setAccessCode]           = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [recordsBoardEnabled, setRecordsBoardEnabled] = useState(() => localStorage.getItem('sdp-records-public') === 'true');
-  useEffect(() => {
-    const onStorage = () => setRecordsBoardEnabled(localStorage.getItem('sdp-records-public') === 'true');
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  const [recordsBoardEnabled, setRecordsBoardEnabled] = useState(false);
   const [activeEvent, setActiveEvent]         = useState(null);
   const [activeTab, setActiveTab]             = useState('standings');
   const [standings, setStandings]             = useState([]);
@@ -2986,10 +3010,14 @@ const ParentPortal = ({ onNavigate }) => {
       const row = rows[0];
       // Reconstruct the event shape the rest of the portal expects
       const eventObj = { id: row.event_id, name: row.event_name, event_date: row.event_date, school_id: row.school_id, is_active: true, parent_access_code: accessCode.toUpperCase() };
-      const { data: hcData } = await supabase.from('school_houses').select('*').eq('school_id', row.school_id);
+      const [{ data: hcData }, { data: schoolData }] = await Promise.all([
+        supabase.from('school_houses').select('*').eq('school_id', row.school_id),
+        supabase.from('schools').select('records_public').eq('id', row.school_id).maybeSingle(),
+      ]);
       const map = {};
       (hcData || []).forEach(h => { map[h.house_name] = h.house_color; });
       setHouseColors(map);
+      setRecordsBoardEnabled(schoolData?.records_public === true);
       setActiveEvent(eventObj); setIsAuthenticated(true);
     } catch (e) { setErrorMsg('Invalid code. Please check with your school.'); } finally { setIsLoading(false); }
   };
@@ -3468,6 +3496,7 @@ const RecordBoardModule = ({ user, showToast }) => {
   const [showForm, setShowForm]       = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [filterAge, setFilterAge]     = useState('All');
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [form, setForm] = useState({ activity_name: '', age_group: 'U10', record_value: '', holder_name: '', record_year: new Date().getFullYear() });
 
   const fetchData = async () => {
@@ -3531,8 +3560,10 @@ const RecordBoardModule = ({ user, showToast }) => {
     fetchData();
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this record permanently? This cannot be undone.')) return;
+  const handleDelete = (id) => setDeleteConfirmId(id);
+  const confirmDelete = async () => {
+    const id = deleteConfirmId;
+    setDeleteConfirmId(null);
     const { error } = await supabase.from('historical_records').delete().eq('id', id);
     if (error) { showToast('Delete failed', 'error'); return; }
     showToast('Record removed');
@@ -3736,6 +3767,15 @@ const RecordBoardModule = ({ user, showToast }) => {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteConfirmId}
+        title="Delete Record"
+        message="Delete this record permanently? This cannot be undone."
+        confirmText="Delete"
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteConfirmId(null)}
+      />
     </div>
   );
 };
@@ -3747,12 +3787,17 @@ const SuperAdminPanel = ({ user, onBack }) => {
   const [allStudents, setAllStudents] = useState([]);
   const [allEvents, setAllEvents]     = useState([]);
   const [expandedSchool, setExpandedSchool] = useState(null);
-  const [recordsPublic, setRecordsPublic] = useState(() => localStorage.getItem('sdp-records-public') === 'true');
+  const [recordsPublic, setRecordsPublic] = useState(false);
 
-  const toggleRecordsBoard = () => {
+  useEffect(() => {
+    supabase.from('schools').select('records_public').eq('id', allSchools[0]?.id ?? '').maybeSingle()
+      .then(({ data }) => { if (data) setRecordsPublic(data.records_public); });
+  }, [allSchools]);
+
+  const toggleRecordsBoard = async () => {
     const next = !recordsPublic;
     setRecordsPublic(next);
-    localStorage.setItem('sdp-records-public', String(next));
+    await supabase.from('schools').update({ records_public: next }).eq('id', allSchools[0]?.id ?? '');
   };
 
   useEffect(() => {
@@ -4166,7 +4211,7 @@ export default function App() {
     );
   }
 
-  const isSuperAdmin = user?.role === 'super_admin' || user?.email === 'admin@futuretutoringacademy.com';
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const NavItems = ({ onNavigate }) => (
     <>
@@ -4359,7 +4404,10 @@ export default function App() {
           <main className="flex-1 overflow-y-auto min-w-0">
             <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center hide-on-print">
               <div className="flex items-center gap-2"><div className="p-1 bg-sky-500 rounded-lg"><Trophy size={16} className="text-white"/></div><span className="font-bold text-slate-800 dark:text-white">SportsDay Pro</span></div>
-              <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-red-500"><LogOut size={20}/></button>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setShowChangePw(true)} className="p-2 text-slate-500 dark:text-slate-400 hover:text-sky-600" title="Change Password"><Key size={18}/></button>
+                <button onClick={handleLogout} className="p-2 text-slate-500 hover:text-red-500"><LogOut size={20}/></button>
+              </div>
             </div>
             <div className="p-4 md:p-8 max-w-6xl mx-auto relative print-container">
               <StaffDashboard user={user} showToast={showToast}/>
