@@ -2437,7 +2437,6 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         if (existing && existing.length > 0) {
           const loaded = {};
           existing.forEach(r => { loaded[r.student_id] = r.result_value; });
-          savedScoresRef.current = loaded;
           if (!isRefresh) setScores(loaded);
           else setScores(prev => ({ ...loaded, ...prev }));
         }
