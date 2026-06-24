@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -1095,24 +1095,45 @@ const EventSetupModule = ({ onBack, user, showToast }) => {
             ) : activities.length === 0 ? (
               <div className="text-center py-8 text-slate-500 dark:text-slate-400 border-2 border-dashed border-slate-200 dark:border-slate-600 rounded-lg">No activities added yet.</div>
             ) : (
-              <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg max-h-[500px] overflow-y-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
-                    <tr><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Activity</th><th className="px-4 py-3 font-semibold text-center">Kids/House</th><th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th><th className="px-4 py-3 text-right font-semibold">Action</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {activities.map(act => (
-                      <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
-                        <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
-                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
-                        <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
-                        <td className="px-4 py-3"><div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity focus-within:opacity-100"><input type="number" step="0.01" value={act.recordValue || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordValue', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Val" className="record-input w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/><input type="text" value={act.recordHolder || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordHolder', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Holder Name" className="record-input w-32 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/></div></td>
-                        <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile card list */}
+                <div className="md:hidden border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-100 dark:divide-slate-700 max-h-[500px] overflow-y-auto">
+                  {activities.map(act => (
+                    <div key={act.id} className="px-4 py-3 flex items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 dark:text-white text-sm">{act.name}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_',' ').toUpperCase()}</span>
+                        </div>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
+                          <span className="font-semibold">{act.ageGroup}</span> · <span className={act.gender === 'Boys' ? 'text-blue-500' : act.gender === 'Girls' ? 'text-pink-500' : 'text-purple-500'}>{act.gender}</span> · {act.participantsPerHouse || 2} per house
+                          {act.recordValue && <span className="ml-1 text-amber-600 dark:text-amber-400"> · 🏆 {act.recordValue}</span>}
+                        </p>
+                      </div>
+                      <button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 flex-shrink-0 transition-colors"><Trash2 size={16}/></button>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg max-h-[500px] overflow-y-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
+                      <tr><th className="px-4 py-3 font-semibold">Group</th><th className="px-4 py-3 font-semibold">Activity</th><th className="px-4 py-3 font-semibold text-center">Kids/House</th><th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th><th className="px-4 py-3 text-right font-semibold">Action</th></tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {activities.map(act => (
+                        <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
+                          <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
+                          <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
+                          <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
+                          <td className="px-4 py-3"><div className="flex items-center gap-2 opacity-50 group-hover:opacity-100 transition-opacity focus-within:opacity-100"><input type="number" step="0.01" value={act.recordValue || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordValue', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Val" className="record-input w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/><input type="text" value={act.recordHolder || ''} onChange={(e) => handleUpdateActivityProp(act.id, 'recordHolder', e.target.value)} onKeyDown={handleRecordKeyDown} placeholder="Holder Name" className="record-input w-32 px-2 py-1 text-xs border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-amber-500 bg-white dark:bg-slate-700 dark:text-white"/></div></td>
+                          <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </Card>
         </div>
@@ -1349,7 +1370,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
 
   return (
     <div className="space-y-6">
-      <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school? They will lose access immediately.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
+      <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school?\n\nNote: their login account remains active in the system — only their school access is revoked. Contact your Supabase admin to fully delete the account if needed.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -1377,39 +1398,56 @@ const StudentDirectoryModule = ({ user, showToast }) => {
       {/* ── STUDENTS TAB ── */}
       {tab === 'students' && (
         <Card className="!p-0 overflow-hidden">
-          <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-            <table className="w-full text-sm text-left relative">
-              <thead className="bg-slate-100 text-slate-600 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-                <tr><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr><td colSpan="6" className="text-center py-12"><Loader2 className="animate-spin mx-auto text-slate-400" size={24}/></td></tr>
-                ) : filteredAndSorted.length === 0 ? (
-                  <tr><td colSpan="6" className="text-center py-12 text-slate-500">No students found. Import a class list first.</td></tr>
-                ) : filteredAndSorted.map((student, index) => {
-                  let showSep = false, sepLabel = '';
-                  if (index > 0 && !['last_name','first_name'].includes(sortConfig.key)) {
-                    if (student[sortConfig.key] !== filteredAndSorted[index - 1][sortConfig.key]) { showSep = true; sepLabel = student[sortConfig.key]; }
-                  }
-                  if (index === 0 && !['last_name','first_name'].includes(sortConfig.key)) { showSep = true; sepLabel = student[sortConfig.key]; }
-                  return (
-                    <React.Fragment key={student.id}>
-                      {showSep && <tr className="bg-slate-100/80"><td colSpan="6" className="px-4 py-1.5 font-bold text-slate-700 text-xs uppercase tracking-wider border-y border-slate-200">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
-                      <tr className="hover:bg-slate-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-slate-900">{student.last_name}</td>
-                        <td className="px-4 py-3 text-slate-700">{student.first_name}</td>
-                        <td className="px-4 py-3 text-slate-600 font-medium">{student.class}</td>
-                        <td className="px-4 py-3 text-slate-600">{student.age_group}</td>
-                        <td className="px-4 py-3 text-slate-600">{student.gender}</td>
-                        <td className="px-4 py-3 text-slate-500"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
-                      </tr>
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {isLoading ? (
+            <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-slate-400" size={24}/></div>
+          ) : filteredAndSorted.length === 0 ? (
+            <p className="text-center py-12 text-slate-500">No students found. Import a class list first.</p>
+          ) : (
+            <>
+              {/* Mobile card list */}
+              <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+                {filteredAndSorted.map(student => (
+                  <div key={student.id} className="flex items-center gap-3 px-4 py-3">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${getHouseColor(student.house, houseColors)}`}/>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-slate-900 dark:text-white text-sm">{student.last_name}, {student.first_name}</p>
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{student.class} · {student.age_group} · {student.gender} · {student.house || 'Unassigned'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto">
+                <table className="w-full text-sm text-left relative">
+                  <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10 shadow-sm">
+                    <tr><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {filteredAndSorted.map((student, index) => {
+                      let showSep = false, sepLabel = '';
+                      if (index > 0 && !['last_name','first_name'].includes(sortConfig.key)) {
+                        if (student[sortConfig.key] !== filteredAndSorted[index - 1][sortConfig.key]) { showSep = true; sepLabel = student[sortConfig.key]; }
+                      }
+                      if (index === 0 && !['last_name','first_name'].includes(sortConfig.key)) { showSep = true; sepLabel = student[sortConfig.key]; }
+                      return (
+                        <React.Fragment key={student.id}>
+                          {showSep && <tr className="bg-slate-100/80 dark:bg-slate-700/40"><td colSpan="6" className="px-4 py-1.5 font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider border-y border-slate-200 dark:border-slate-600">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
+                          <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                            <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{student.last_name}</td>
+                            <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{student.first_name}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{student.class}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.age_group}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.gender}</td>
+                            <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </Card>
       )}
 
@@ -2307,7 +2345,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [flagType, setFlagType]             = useState('issue');
   const [flagMessage, setFlagMessage]       = useState('');
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
-  const savedScoresRef = useRef({});
+  const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
     if (isTrial) { setCurrentRecord(null); return; }
@@ -2426,7 +2464,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   }, [eventAbsentees, activity, kickedNamesCache]);
 
   // Reset to heat 1 whenever heat size changes
-  useEffect(() => { setActiveHeat(1); setSavedHeats(new Set()); }, [heatSize]);
+  useEffect(() => { setActiveHeat(1); setSavedHeats(new Set()); setIsDirty(false); }, [heatSize]);
 
   // Countdown timer
   useEffect(() => {
@@ -2485,7 +2523,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const heatKeys = Object.keys(groupedRoster).sort((a, b) => parseInt(a) - parseInt(b));
   const orderedStudents = heatKeys.flatMap(h => groupedRoster[h]);
 
-  const handleScoreChange = (id, val) => setScores(prev => ({ ...prev, [id]: val }));
+  const handleScoreChange = (id, val) => { setScores(prev => ({ ...prev, [id]: val })); setIsDirty(true); };
 
   const handleKeyDown = (e, nextId) => {
     if (e.key !== 'Enter') return;
@@ -2584,8 +2622,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       }
     } catch (err) { console.error(err); showToast('Failed to save results. Check database schema.', 'error'); return; } finally { setIsSaving(false); }
 
-    // Mark all current scores as saved so unsaved-warning doesn't fire on back
-    savedScoresRef.current = { ...savedScoresRef.current, ...scores };
+    setIsDirty(false);
 
     // Advance to next heat automatically
     if (heatSize !== 'All') {
@@ -2614,11 +2651,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   };
 
   const handleClose = () => {
-    const hasUnsaved = Object.entries(scores).some(([id, v]) => {
-      if (v === '' || v === null || v === undefined) return false;
-      return String(v) !== String(savedScoresRef.current[id] ?? '');
-    });
-    if (hasUnsaved) { setShowUnsavedWarning(true); return; }
+    if (isDirty) { setShowUnsavedWarning(true); return; }
     if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
     onClose();
   };
@@ -2731,7 +2764,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       {/* Heat navigation bar */}
       {heatSize !== 'All' && heatKeys.length > 1 && (
         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
-          <button onClick={() => { if (activeHeat > 1) { setActiveHeat(h => h - 1); setScores({}); } }} disabled={activeHeat <= 1}
+          <button onClick={() => { if (activeHeat > 1) { setActiveHeat(h => h - 1); setScores({}); setIsDirty(false); } }} disabled={activeHeat <= 1}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronLeft size={20}/></button>
           <div className="flex-1 flex items-center justify-center gap-2 flex-wrap">
             {heatKeys.map(h => {
@@ -2739,7 +2772,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               const done = savedHeats.has(num);
               const active = activeHeat === num;
               return (
-                <button key={h} onClick={() => { setActiveHeat(num); setScores({}); }}
+                <button key={h} onClick={() => { setActiveHeat(num); setScores({}); setIsDirty(false); }}
                   className={`w-9 h-9 rounded-full text-sm font-bold transition-colors flex items-center justify-center
                     ${active ? 'bg-sky-500 text-white shadow-md' : done ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'}`}>
                   {done ? '✓' : num}
@@ -2747,7 +2780,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               );
             })}
           </div>
-          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { setActiveHeat(next); setScores({}); } }} disabled={!groupedRoster[activeHeat + 1]}
+          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { setActiveHeat(next); setScores({}); setIsDirty(false); } }} disabled={!groupedRoster[activeHeat + 1]}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronRight size={20}/></button>
 
           {/* Countdown timer */}
