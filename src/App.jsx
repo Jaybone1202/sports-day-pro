@@ -1486,8 +1486,8 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                              {activities.map(act => (
-                                <tr key={act.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
+                              {activities.map(act => (<React.Fragment key={act.id}>
+                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
                                   <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
                                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{act.name} <span className="ml-2 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{act.type.replace('_', ' ').toUpperCase()}</span></td>
                                   <td className="px-4 py-3 text-center font-semibold text-slate-700 dark:text-slate-300"><input type="number" min="1" max="100" value={act.participantsPerHouse || 2} onChange={(e) => handleUpdateActivityProp(act.id, 'participantsPerHouse', parseInt(e.target.value)||1)} className="w-16 px-2 py-1 text-center border border-slate-300 dark:border-slate-600 rounded outline-none focus:ring-2 focus:ring-sky-400 bg-white dark:bg-slate-700 dark:text-white"/></td>
@@ -1595,7 +1595,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                     </td>
                                   </tr>
                                 ) : null}
-                              ))}
+                              </React.Fragment>))}
                             </tbody>
                           </table>
                         </div>
