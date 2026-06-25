@@ -4372,8 +4372,8 @@ const LoginView = ({ onLogin, onNavigate }) => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="mb-4">
-            <img src="/favicon.svg" width="80" height="80" alt="SportsDay Pro"/>
+          <div className="flex justify-center mb-4">
+            <img src="/favicon.svg" width="96" height="96" alt="SportsDay Pro" className="rounded-full shadow-lg shadow-sky-900/50"/>
           </div>
           <h1 className="text-3xl font-black text-white">SportsDay Pro</h1>
           <p className="text-slate-400 mt-2 text-sm">Run your school sports day with confidence</p>
