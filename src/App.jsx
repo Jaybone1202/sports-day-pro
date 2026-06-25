@@ -1169,14 +1169,14 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                 const locked = evt.is_locked && !ended;
                 return (
                   <motion.button variants={staggerItem} key={evt.id} onClick={() => handleEventSelect(evt.id)}
-                    className={`text-left p-4 rounded-xl border-2 transition-all ${
+                    className={`text-left p-4 rounded-xl border-2 transition-all duration-200 backdrop-blur-sm ${
                       isSelected
-                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md'
+                        ? 'border-sky-500 bg-sky-50/90 dark:bg-sky-900/30 shadow-md shadow-sky-100 dark:shadow-sky-900/20'
                         : ended
-                        ? 'border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-900/10 hover:border-rose-300'
+                        ? 'border-rose-200 dark:border-rose-800 bg-rose-50/80 dark:bg-rose-900/10 hover:border-rose-300 hover:shadow-md'
                         : locked
-                        ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 hover:border-amber-400'
-                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
+                        ? 'border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/10 hover:border-amber-400 hover:shadow-md'
+                        : 'border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md'
                     }`}>
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <span className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">{evt.name}</span>
@@ -2493,10 +2493,10 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   return (
                     <div key={activity.id}
                       onClick={() => !isLocked && onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked })}
-                      className={`rounded-xl shadow-sm border p-5 transition-all group relative overflow-hidden flex flex-col justify-between
-                        ${isLocked ? 'bg-slate-50 dark:bg-slate-800/60 border-slate-300 dark:border-slate-600 cursor-default opacity-75' :
-                          isDone ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 cursor-pointer hover:shadow-md' :
-                          'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 cursor-pointer hover:shadow-md hover:border-sky-400'}`}>
+                      className={`rounded-xl shadow-sm border p-5 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between backdrop-blur-sm
+                        ${isLocked ? 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-300/60 dark:border-slate-600/60 cursor-default opacity-75' :
+                          isDone ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-200/60 dark:border-emerald-800/60 cursor-pointer hover:shadow-lg' :
+                          'bg-white/80 dark:bg-slate-800/60 border-slate-200/60 dark:border-slate-700/60 cursor-pointer hover:shadow-lg hover:border-sky-400/60'}`}>
                       <div className={`absolute top-0 left-0 w-1 h-full ${isLocked ? 'bg-slate-400' : isDone ? 'bg-emerald-500' : activity.activity_type === 'track' ? 'bg-sky-500' : activity.activity_type === 'field' ? 'bg-amber-500' : 'bg-purple-500'}`}/>
                       <div>
                         <div className="flex justify-between items-start mb-3 pl-2">
