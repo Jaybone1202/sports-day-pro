@@ -47,6 +47,7 @@ import {
   ChevronRight,
   Lock,
   Unlock,
+  FlagOff,
 } from 'lucide-react';
 
 // ==========================================
@@ -866,7 +867,8 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const [staffSeeAll, setStaffSeeAll] = useState(true);
   const [staffList, setStaffList] = useState([]);
   const [assignments, setAssignments] = useState({});
-  const [lockConfirm, setLockConfirm] = useState(false);
+  const [lockConfirm, setLockConfirm]       = useState(false);
+  const [endEventConfirm, setEndEventConfirm] = useState(false);
   const [openAssignDropdown, setOpenAssignDropdown] = useState(null);
 
   useEffect(() => {
@@ -994,6 +996,15 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     showToast(next ? 'Event locked — staff cannot save new scores' : 'Event unlocked');
   };
 
+  const handleEndEvent = async () => {
+    setEndEventConfirm(false);
+    await supabase.from('events').update({ is_locked: true, is_active: false }).eq('id', selectedEventId);
+    setEventIsLocked(true);
+    setEventIsActive(false);
+    setEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, is_locked: true, is_active: false } : e));
+    showToast('Event ended — scoring locked and parent portal closed.');
+  };
+
   const handleToggleStaffSeeAll = async () => {
     const next = !staffSeeAll;
     setStaffSeeAll(next);
@@ -1074,6 +1085,14 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
         onConfirm={handleToggleLock}
         onCancel={() => setLockConfirm(false)}
       />
+      <ConfirmModal
+        isOpen={endEventConfirm}
+        title="End Event"
+        message={`Are you sure you want to end "${eventName}"?\n\nThis will:\n• Lock scoring — staff cannot enter any more results\n• Close the parent portal\n\nYou can reopen the event manually afterwards if needed.`}
+        confirmText="End Event"
+        onConfirm={handleEndEvent}
+        onCancel={() => setEndEventConfirm(false)}
+      />
 
       {!embedded && (
       <div className="flex items-center justify-between border-b border-slate-200 pb-4">
@@ -1086,6 +1105,12 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
             <button onClick={() => setLockConfirm(true)}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
               {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
+            </button>
+          )}
+          {selectedEventId !== 'new' && eventIsActive && (
+            <button onClick={() => setEndEventConfirm(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-100">
+              <FlagOff size={15}/> End Event
             </button>
           )}
           {selectedEventId !== 'new' && <Button onClick={() => setModalConfig({ isOpen: true, item: selectedEventId, type: 'event' })} variant="danger" disabled={isSaving}><Trash2 size={18}/></Button>}
@@ -1115,32 +1140,41 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
               {events.map(evt => {
                 const isSelected = selectedEventId === evt.id;
-                const locked = evt.is_locked;
+                const ended = evt.is_locked && !evt.is_active;
+                const locked = evt.is_locked && !ended;
                 return (
                   <button key={evt.id} onClick={() => handleEventSelect(evt.id)}
                     className={`text-left p-4 rounded-xl border-2 transition-all ${
                       isSelected
                         ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md'
+                        : ended
+                        ? 'border-rose-200 dark:border-rose-800 bg-rose-50/60 dark:bg-rose-900/10 hover:border-rose-300'
                         : locked
                         ? 'border-amber-300 dark:border-amber-700 bg-amber-50/60 dark:bg-amber-900/10 hover:border-amber-400'
                         : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-sm'
                     }`}>
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <span className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">{evt.name}</span>
-                      {locked && <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5"/>}
+                      {ended ? <FlagOff size={14} className="text-rose-400 flex-shrink-0 mt-0.5"/> : locked && <Lock size={14} className="text-amber-500 flex-shrink-0 mt-0.5"/>}
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {new Date(evt.event_date + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </p>
                     <div className="flex gap-1.5 mt-2.5 flex-wrap">
-                      {locked && (
+                      {ended ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-300">
+                          <FlagOff size={9}/> Ended
+                        </span>
+                      ) : locked ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">
                           <Lock size={9}/> Locked
                         </span>
+                      ) : null}
+                      {!ended && (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${evt.is_active ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
+                          {evt.is_active ? 'Live' : 'Archived'}
+                        </span>
                       )}
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${evt.is_active ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'}`}>
-                        {evt.is_active ? 'Live' : 'Archived'}
-                      </span>
                     </div>
                   </button>
                 );
@@ -1159,6 +1193,12 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                     <button onClick={() => setLockConfirm(true)}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors ${eventIsLocked ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700 text-amber-600 dark:text-amber-400 hover:bg-amber-100' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
                       {eventIsLocked ? <><Lock size={15}/> Locked</> : <><Unlock size={15}/> Lock</>}
+                    </button>
+                  )}
+                  {selectedEventId !== 'new' && eventIsActive && (
+                    <button onClick={() => setEndEventConfirm(true)}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold border transition-colors bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-100">
+                      <FlagOff size={15}/> End Event
                     </button>
                   )}
                   {selectedEventId !== 'new' && (
