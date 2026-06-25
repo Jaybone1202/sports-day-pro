@@ -3046,8 +3046,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const handleKeyDown = (e, nextId) => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (nextId) { const el = document.getElementById(`score-input-${nextId}`); if (el) el.focus(); }
-    else e.target.blur();
+    e.stopPropagation();
+    if (nextId) {
+      const els = document.querySelectorAll(`[id="score-input-${nextId}"]`);
+      const el = Array.from(els).find(el => el.offsetParent !== null);
+      if (el) el.focus();
+    } else {
+      e.target.blur();
+    }
   };
 
   const executeKick = async (status = 'DNS') => {
