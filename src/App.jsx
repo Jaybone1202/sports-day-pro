@@ -4787,7 +4787,7 @@ export default function App() {
               <div className="mt-1.5 text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-semibold">{user.role} Portal</div>
             </div>
             <nav className="flex-1 p-3 space-y-0.5">
-              <div className="px-3 py-2.5 rounded-xl flex items-center gap-3 bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 text-sm font-semibold"><Activity size={18}/> Dashboard <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sky-500"/></div>
+              <div className="px-3 py-2.5 rounded-xl flex items-center gap-3 bg-gradient-to-r from-sky-500 to-sky-400 text-white font-semibold shadow-md shadow-sky-200 dark:shadow-sky-900/50 text-sm"><Activity size={18}/> Dashboard <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/70"/></div>
             </nav>
             <div className="p-3 border-t border-slate-200 dark:border-slate-700">
               <button onClick={() => setDarkMode(d => !d)}
