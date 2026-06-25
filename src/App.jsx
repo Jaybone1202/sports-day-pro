@@ -1576,34 +1576,17 @@ const StudentDirectoryModule = ({ user, showToast }) => {
       showToast('Please fill in all fields', 'error'); return;
     }
     setInviting(true);
-    let createdAuthId = null;
     try {
       const tempPassword = Math.random().toString(36).slice(-10) + 'Aa1!';
-
-      // Save organiser session BEFORE signUp — Supabase switches session to the
-      // new user when email confirmation is disabled, which breaks the RLS INSERT.
-      const { data: { session: organisersSession } } = await supabase.auth.getSession();
-
-      const { data: authData, error: authErr } = await supabase.auth.signUp({ email: inviteEmail.trim(), password: tempPassword });
-      if (authErr) throw authErr;
-      if (!authData.user) throw new Error('Could not create account');
-      createdAuthId = authData.user.id;
-
-      // Restore organiser session so the INSERT runs with the correct auth.uid()
-      if (organisersSession) {
-        const { error: sessionErr } = await supabase.auth.setSession({
-          access_token: organisersSession.access_token,
-          refresh_token: organisersSession.refresh_token,
-        });
-        if (sessionErr) throw new Error('Session restore failed — please refresh and try again.');
-      }
-
-      const { error: userErr } = await supabase.from('users').insert({
-        id: createdAuthId, school_id: user.school_id,
-        email: inviteEmail.trim(), first_name: inviteFirst.trim(),
-        last_name: inviteLast.trim(), role: 'staff',
+      const { error } = await supabase.rpc('create_staff_user', {
+        p_email:      inviteEmail.trim(),
+        p_password:   tempPassword,
+        p_first_name: inviteFirst.trim(),
+        p_last_name:  inviteLast.trim(),
+        p_school_id:  user.school_id,
+        p_role:       'staff',
       });
-      if (userErr) throw userErr;
+      if (error) throw error;
       setPendingInvite({ name: inviteFirst.trim(), email: inviteEmail.trim(), password: tempPassword });
       setInviteEmail(''); setInviteFirst(''); setInviteLast('');
       fetchStaff();
