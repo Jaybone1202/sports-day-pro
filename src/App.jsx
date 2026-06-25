@@ -2639,7 +2639,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
 
                   return (
                     <div key={activity.id}
-                      onClick={() => !isLocked && onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked })}
+                      onClick={() => !isLocked && onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked, attemptsEnabled: activity.attempts_enabled ?? false, maxAttempts: activity.max_attempts ?? 3, tiebreakEnabled: activity.tiebreak_enabled ?? false, unit: activity.unit ?? 'm', higherIsBetter: activity.higher_is_better ?? true })}
                       className={`rounded-xl shadow-sm border p-5 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between backdrop-blur-md
                         ${isLocked ? 'bg-white/40 dark:bg-slate-800/40 border-white/60 dark:border-slate-600/60 cursor-default opacity-75' :
                           isDone ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200/60 dark:border-emerald-800/60 cursor-pointer hover:shadow-lg' :
@@ -2846,6 +2846,15 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
+  // Multi-attempt state (only used when activity.attemptsEnabled)
+  const [attempts, setAttempts]             = useState({});
+  const [currentAttemptNum, setCurrentAttemptNum] = useState(1);
+  const [activeStudentId, setActiveStudentId] = useState(null);
+  const [attemptInput, setAttemptInput]     = useState('');
+  const [isTiebreak, setIsTiebreak]         = useState(false);
+  const [tiebreakRound, setTiebreakRound]   = useState(1);
+  const [tieStudents, setTieStudents]       = useState([]);
+
   useEffect(() => {
     if (isTrial) { setCurrentRecord(null); return; }
     const matched = schoolRecords.find(r =>
@@ -2938,6 +2947,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           existing.forEach(r => { loaded[r.student_id] = r.result_value; });
           if (!isRefresh) setScores(loaded);
           else setScores(prev => ({ ...loaded, ...prev }));
+        }
+        if (activity.attemptsEnabled) {
+          const { data: attData } = await supabase.from('activity_attempts').select('*').eq('activity_id', activity.id);
+          if (attData && attData.length > 0) {
+            const attMap = {};
+            attData.forEach(a => {
+              const key = a.attempt_type === 'tiebreak' ? `tb_${a.tiebreak_round}_${a.student_id}` : `${a.attempt_number}_${a.student_id}`;
+              attMap[key] = { value: a.value, isFoul: a.is_foul, attemptNumber: a.attempt_number, attemptType: a.attempt_type, tiebreakRound: a.tiebreak_round };
+            });
+            if (!isRefresh) setAttempts(attMap);
+          }
         }
       }
     } catch (e) { console.error('Roster Fetch Error:', e); showToast('Failed to load roster.', 'error'); }
@@ -3148,6 +3168,90 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     setShowFlagModal(false); setFlagMessage(''); setFlagType('issue');
   };
 
+  // --- MULTI-ATTEMPT HELPERS ---
+  const getBestAttempt = (studentId) => {
+    const higherIsBetter = activity.higherIsBetter ?? true;
+    const normalKeys = Array.from({ length: activity.maxAttempts || 3 }, (_, i) => `${i + 1}_${studentId}`);
+    const values = normalKeys.map(k => attempts[k]).filter(a => a && !a.isFoul && a.value !== null && a.value !== undefined).map(a => parseFloat(a.value));
+    if (values.length === 0) return null;
+    return higherIsBetter ? Math.max(...values) : Math.min(...values);
+  };
+
+  const getTiebreakBest = (studentId) => {
+    const higherIsBetter = activity.higherIsBetter ?? true;
+    const tbKeys = Object.keys(attempts).filter(k => k.startsWith('tb_') && k.endsWith(`_${studentId}`));
+    const values = tbKeys.map(k => attempts[k]).filter(a => a && !a.isFoul && a.value !== null).map(a => parseFloat(a.value));
+    if (values.length === 0) return null;
+    return higherIsBetter ? Math.max(...values) : Math.min(...values);
+  };
+
+  const getAttemptsDone = (studentId) => {
+    return Array.from({ length: currentAttemptNum }, (_, i) => `${i + 1}_${studentId}`).filter(k => attempts[k] !== undefined).length;
+  };
+
+  const handleSaveAttempt = async (isFoul = false) => {
+    if (!activeStudentId) return;
+    const val = isFoul ? null : parseFloat(attemptInput);
+    if (!isFoul && (isNaN(val) || attemptInput.trim() === '')) return;
+    const key = isTiebreak ? `tb_${tiebreakRound}_${activeStudentId}` : `${currentAttemptNum}_${activeStudentId}`;
+    const newAttempt = { value: isFoul ? null : val, isFoul, attemptNumber: isTiebreak ? null : currentAttemptNum, attemptType: isTiebreak ? 'tiebreak' : 'normal', tiebreakRound: isTiebreak ? tiebreakRound : null };
+    setAttempts(prev => ({ ...prev, [key]: newAttempt }));
+    setAttemptInput('');
+    setActiveStudentId(null);
+    setIsDirty(true);
+    try {
+      await supabase.from('activity_attempts').upsert({
+        school_id: user.school_id, activity_id: activity.id, student_id: activeStudentId,
+        attempt_number: isTiebreak ? null : currentAttemptNum, value: isFoul ? null : val,
+        is_foul: isFoul, attempt_type: isTiebreak ? 'tiebreak' : 'normal',
+        tiebreak_round: isTiebreak ? tiebreakRound : null, recorded_by: user.id,
+      }, { onConflict: isTiebreak ? 'activity_id,student_id,attempt_type,tiebreak_round' : 'activity_id,student_id,attempt_number' });
+
+      if (!isTiebreak) {
+        const updatedBest = (() => {
+          const higherIsBetter = activity.higherIsBetter ?? true;
+          const allKeys = Array.from({ length: activity.maxAttempts || 3 }, (_, i) => `${i + 1}_${activeStudentId}`);
+          const allAttempts = { ...attempts, [key]: newAttempt };
+          const values = allKeys.map(k => allAttempts[k]).filter(a => a && !a.isFoul && a.value !== null).map(a => parseFloat(a.value));
+          if (values.length === 0) return null;
+          return higherIsBetter ? Math.max(...values) : Math.min(...values);
+        })();
+        if (updatedBest !== null) {
+          await supabase.from('event_results').upsert({ event_activity_id: activity.id, student_id: activeStudentId, result_value: updatedBest, recorded_by: user.id, is_new_record: false }, { onConflict: 'event_activity_id,student_id' });
+          setScores(prev => ({ ...prev, [activeStudentId]: updatedBest }));
+        }
+      }
+    } catch (e) { showToast('Failed to save attempt', 'error'); }
+  };
+
+  const detectTies = () => {
+    if (!activity.tiebreakEnabled) return [];
+    const higherIsBetter = activity.higherIsBetter ?? true;
+    const bests = studentRoster.map(s => ({ id: s.id, best: getBestAttempt(s.id) })).filter(s => s.best !== null);
+    if (bests.length === 0) return [];
+    const sorted = [...bests].sort((a, b) => higherIsBetter ? b.best - a.best : a.best - b.best);
+    const topScore = sorted[0].best;
+    return sorted.filter(s => s.best === topScore).map(s => s.id);
+  };
+
+  const handleStartTiebreak = () => {
+    const tied = detectTies();
+    if (tied.length <= 1) return;
+    setTieStudents(tied);
+    setIsTiebreak(true);
+    setTiebreakRound(prev => prev + 1);
+    showToast(`Jump-off round ${tiebreakRound} started for ${tied.length} students`);
+  };
+
+  const allAttemptsComplete = () => {
+    const max = activity.maxAttempts || 3;
+    return studentRoster.every(s => {
+      const done = Array.from({ length: max }, (_, i) => `${i + 1}_${s.id}`).filter(k => attempts[k] !== undefined).length;
+      return done >= max;
+    });
+  };
+  // --- END MULTI-ATTEMPT HELPERS ---
+
   const handleClose = () => {
     if (isDirty) { setShowUnsavedWarning(true); return; }
     if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
@@ -3162,6 +3266,150 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const isPlacingMode = !isTrial && activity.scoringType === 'placing';
   const isTrack = isTrial ? activity.filters.unit === 'seconds' : activity.type === 'track';
   const unitLabel = isPlacingMode ? 'Place' : isTrial ? (activity.filters.unit === 'seconds' ? 'Secs' : activity.filters.unit === 'cm' ? 'cm' : 'Meters') : (isTrack ? 'Secs' : 'Meters');
+  const attUnit = activity.unit || (isTrack ? 'seconds' : 'm');
+
+  // --- MULTI-ATTEMPT UI ---
+  if (!isTrial && activity.attemptsEnabled) {
+    const max = activity.maxAttempts || 3;
+    const higherIsBetter = activity.higherIsBetter ?? true;
+    const tiedIds = detectTies();
+    const allDone = allAttemptsComplete();
+    const tieDetected = allDone && tiedIds.length > 1 && activity.tiebreakEnabled;
+    const visibleRoster = isTiebreak ? studentRoster.filter(s => tieStudents.includes(s.id)) : studentRoster;
+
+    return (
+      <div className="space-y-4 relative">
+        <ConfirmModal isOpen={showUnsavedWarning} title="Unsaved Scores" message="You have scores that haven't been saved yet. Leave anyway?" confirmText="Leave" onConfirm={confirmClose} onCancel={() => setShowUnsavedWarning(false)}/>
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
+          <div className="flex items-center gap-3">
+            <Button onClick={handleClose} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">{activity.name}</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{activity.ageGroup} {activity.gender} · {activity.type.toUpperCase()} · {attUnit}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {isTiebreak ? (
+              <span className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-sm font-bold">Jump-off round {tiebreakRound}</span>
+            ) : (
+              <span className="px-3 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 text-sm font-bold">Attempt {currentAttemptNum} of {max}</span>
+            )}
+          </div>
+        </div>
+
+        {/* Tie detected banner */}
+        {tieDetected && !isTiebreak && (
+          <div className="flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl">
+            <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5"/>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">Tie detected — 1st place</p>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-0.5">{tiedIds.map(id => { const s = studentRoster.find(st => st.id === id); return s ? `${s.first_name} ${s.last_name}` : ''; }).join(' and ')} both {higherIsBetter ? 'jumped' : 'ran'} {getBestAttempt(tiedIds[0])}{attUnit}.</p>
+            </div>
+            <div className="flex gap-2 flex-shrink-0">
+              <button onClick={handleStartTiebreak} className="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors">Start jump-off</button>
+              <button onClick={() => setTieStudents([])} className="px-3 py-1.5 rounded-lg border border-amber-300 dark:border-amber-600 text-amber-700 dark:text-amber-300 text-sm font-medium hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors">Share placing</button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="text-center py-12"><Loader2 className="animate-spin mx-auto text-slate-400" size={28}/></div>
+        ) : (
+          <div className="space-y-2">
+            {visibleRoster.map(student => {
+              const best = getBestAttempt(student.id);
+              const tbBest = getTiebreakBest(student.id);
+              const isActive = activeStudentId === student.id;
+              const thisAttemptKey = isTiebreak ? `tb_${tiebreakRound}_${student.id}` : `${currentAttemptNum}_${student.id}`;
+              const thisAttemptDone = attempts[thisAttemptKey] !== undefined;
+              const attemptsDone = getAttemptsDone(student.id);
+
+              return (
+                <div key={student.id} className={`rounded-xl border transition-all duration-150 ${isActive ? 'border-sky-400 bg-sky-50/80 dark:bg-sky-900/20' : thisAttemptDone ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-900/10' : 'border-white/80 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md'}`}>
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="w-9 h-9 rounded-full bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center text-sky-700 dark:text-sky-300 text-sm font-bold flex-shrink-0">
+                      {(student.first_name||'?')[0]}{(student.last_name||'?')[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">{student.first_name} {student.last_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                        <span className="text-xs text-slate-400">{student.house}</span>
+                        {best !== null && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">Best: {best}{attUnit}</span>}
+                        {tbBest !== null && <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">JO: {tbBest}{attUnit}</span>}
+                        <span className="text-xs text-slate-400">{Array.from({ length: max }, (_, i) => { const k = `${i+1}_${student.id}`; const a = attempts[k]; return a ? (a.isFoul ? 'F' : `${a.value}`) : '—'; }).join(' · ')}</span>
+                      </div>
+                    </div>
+                    {!isActive && !isLocked && (
+                      <button onClick={() => { setActiveStudentId(student.id); setAttemptInput(''); }}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${thisAttemptDone ? 'border-slate-200 dark:border-slate-600 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800' : 'border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400 bg-white dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-900/30'}`}>
+                        {thisAttemptDone ? 'Edit' : 'Enter'}
+                      </button>
+                    )}
+                  </div>
+                  {isActive && (
+                    <div className="px-3 pb-3 flex items-center gap-2 border-t border-sky-200 dark:border-sky-800 pt-2 mt-0">
+                      <input
+                        autoFocus
+                        type="number" step="0.01"
+                        value={attemptInput}
+                        onChange={e => setAttemptInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && handleSaveAttempt(false)}
+                        placeholder={`Result in ${attUnit}`}
+                        className="flex-1 px-3 py-2 border border-sky-300 dark:border-sky-700 rounded-lg outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-sky-400"
+                      />
+                      <button onClick={() => handleSaveAttempt(false)} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg text-sm font-semibold transition-colors">Save</button>
+                      <button onClick={() => handleSaveAttempt(true)} className="px-3 py-2 border border-red-200 dark:border-red-700 text-red-500 dark:text-red-400 rounded-lg text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">Foul</button>
+                      <button onClick={() => { setActiveStudentId(null); setAttemptInput(''); }} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><X size={16}/></button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Round navigation */}
+        {!isTiebreak && (
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+            <button onClick={() => setCurrentAttemptNum(n => Math.max(1, n - 1))} disabled={currentAttemptNum <= 1}
+              className="flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 transition-colors">
+              <ChevronLeft size={16}/> Previous
+            </button>
+            <div className="flex gap-1.5">
+              {Array.from({ length: max }, (_, i) => (
+                <button key={i} onClick={() => setCurrentAttemptNum(i + 1)}
+                  className={`w-8 h-8 rounded-full text-sm font-bold transition-colors ${currentAttemptNum === i + 1 ? 'bg-sky-500 text-white' : 'border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600'}`}>
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+            {currentAttemptNum < max ? (
+              <button onClick={() => setCurrentAttemptNum(n => Math.min(max, n + 1))}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 transition-colors">
+                Next attempt <ChevronRight size={16}/>
+              </button>
+            ) : (
+              <button onClick={() => { if (tieDetected) handleStartTiebreak(); }} disabled={!tieDetected}
+                className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${tieDetected ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'border border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-default'}`}>
+                {tieDetected ? 'Start jump-off' : 'All done'}
+              </button>
+            )}
+          </div>
+        )}
+        {isTiebreak && (
+          <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-slate-700">
+            <button onClick={() => { setIsTiebreak(false); setTieStudents([]); }} className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Back to main results</button>
+            <button onClick={handleStartTiebreak} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-semibold hover:bg-amber-600 transition-colors">
+              Next jump-off round <ChevronRight size={16}/>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+  // --- END MULTI-ATTEMPT UI ---
   const headerTitle = isTrial ? `${activity.trialData.name} - ${activity.filters.customActivityName}` : activity.name;
   const heatsEnabled = heatSize !== 'All';
   let subtitle = isTrial
