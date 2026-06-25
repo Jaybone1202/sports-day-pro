@@ -233,7 +233,7 @@ const PageTransition = ({ children, keyProp }) => (
 );
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 ${className}`}>
+  <div className={`bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-md border border-slate-200/60 dark:border-slate-700/60 p-6 transition-shadow duration-200 ${className}`}>
     {children}
   </div>
 );
@@ -294,8 +294,8 @@ const StatCard = ({ icon: Icon, label, value, color = 'sky' }) => {
   };
   return (
     <motion.div variants={staggerItem}
-      className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-shadow">
-      <div className={`inline-flex p-2.5 rounded-xl mb-3 ${colors[color] || colors.sky}`}><Icon size={20}/></div>
+      className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-5 shadow-sm hover:shadow-lg transition-all duration-200 group">
+      <div className={`inline-flex p-2.5 rounded-xl mb-3 shadow-sm group-hover:scale-110 transition-transform duration-200 ${colors[color] || colors.sky}`}><Icon size={20}/></div>
       <p className="text-3xl font-black text-slate-800 dark:text-white">{value}</p>
       <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">{label}</p>
     </motion.div>
@@ -2158,10 +2158,14 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
     <PageTransition keyProp="dashboard">
     <div className="space-y-6">
       {/* Welcome banner */}
-      <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-2xl p-6 text-white">
-        <p className="text-sky-100 text-sm font-medium mb-1">Welcome back</p>
-        <h1 className="text-2xl font-black">{user.first_name} 👋</h1>
-        <p className="text-sky-100 text-sm mt-1">Here's your sports day at a glance.</p>
+      <div className="relative overflow-hidden bg-gradient-to-br from-sky-500 via-sky-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-sky-200/50 dark:shadow-sky-900/30">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-24 translate-x-24"/>
+        <div className="absolute bottom-0 right-16 w-32 h-32 bg-white/5 rounded-full translate-y-12"/>
+        <div className="relative">
+          <p className="text-sky-100 text-sm font-medium mb-1">Welcome back</p>
+          <h1 className="text-2xl font-black">{user.first_name} 👋</h1>
+          <p className="text-sky-100 text-sm mt-1">Here's your sports day at a glance.</p>
+        </div>
       </div>
 
       {/* Stats */}
@@ -4626,15 +4630,15 @@ export default function App() {
             onClick={() => { setOrganiserView(view); if (onNavigate) onNavigate(); }}
             className={`w-full px-3 py-2.5 rounded-xl flex items-center gap-3 transition-all text-sm font-medium ${
               isActive
-                ? 'bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400 font-semibold'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-slate-200'
+                ? 'bg-gradient-to-r from-sky-500 to-sky-400 text-white font-semibold shadow-md shadow-sky-200 dark:shadow-sky-900/50'
+                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200'
             }`}>
             <Icon size={18}/> {label}
             {view === 'flags' && openFlagCount > 0 && (
               <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{openFlagCount}</span>
             )}
-            {isActive && view !== 'flags' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sky-500"/>}
-            {isActive && view === 'flags' && openFlagCount === 0 && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sky-500"/>}
+            {isActive && view !== 'flags' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80"/>}
+            {isActive && view === 'flags' && openFlagCount === 0 && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80"/>}
           </button>
         );
       })}
@@ -4675,9 +4679,9 @@ export default function App() {
       {currentRoute === 'parent'   && <ParentPortal onNavigate={setCurrentRoute}/>}
       {currentRoute === 'register' && <SchoolRegistration onSuccess={handleLogin} onBack={() => setCurrentRoute('login')}/>}
       {currentRoute === 'super-admin' && user && (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
-          <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
-            <div className="p-5 border-b border-slate-200">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
+          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+            <div className="p-5 border-b border-slate-200/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
                 <span className="font-bold text-slate-800 text-base tracking-tight">SportsDay Pro</span>
@@ -4704,13 +4708,13 @@ export default function App() {
 
       {/* ---- ORGANISER DASHBOARD ---- */}
       {currentRoute === 'organiser-dashboard' && ['organiser', 'super_admin'].includes(user?.role) && (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
           {/* Mobile nav overlay */}
           {mobileNavOpen && (
             <div className="fixed inset-0 z-50 md:hidden" onClick={() => setMobileNavOpen(false)}>
               <div className="absolute inset-0 bg-black/40"/>
-              <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white dark:bg-slate-800 flex flex-col shadow-xl" onClick={e => e.stopPropagation()}>
-                <div className="p-5 border-b border-slate-200 flex items-center justify-between">
+              <aside className="absolute left-0 top-0 bottom-0 w-64 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="p-5 border-b border-slate-200/60 flex items-center justify-between">
                   <div className="flex items-center gap-2"><img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/><span className="font-bold text-slate-800">SportsDay Pro</span></div>
                   <button onClick={() => setMobileNavOpen(false)} className="text-slate-400 hover:text-slate-700 p-1"><X size={20}/></button>
                 </div>
@@ -4725,8 +4729,8 @@ export default function App() {
           )}
 
           {/* Desktop sidebar */}
-          <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700">
+          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+            <div className="p-5 border-b border-slate-200/60 dark:border-slate-700/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
                 <span className="font-bold text-slate-800 dark:text-white text-base tracking-tight">SportsDay Pro</span>
@@ -4734,7 +4738,7 @@ export default function App() {
               <div className="mt-1.5 text-xs uppercase tracking-widest text-slate-400 dark:text-slate-500 font-semibold">{user.role} Portal</div>
             </div>
             <nav className="flex-1 p-3 space-y-0.5"><NavItems/></nav>
-            <div className="p-3 border-t border-slate-200 dark:border-slate-700">
+            <div className="p-3 border-t border-slate-200/60 dark:border-slate-700/60">
               <button onClick={() => setDarkMode(d => !d)}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-slate-200 text-sm font-medium transition-colors mb-1">
                 {darkMode ? <Sun size={16}/> : <Moon size={16}/>}
@@ -4773,9 +4777,9 @@ export default function App() {
 
       {/* ---- STAFF DASHBOARD ---- */}
       {currentRoute === 'staff-dashboard' && user && (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex">
-          <aside className="w-56 bg-white dark:bg-slate-800 flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200 dark:border-slate-700">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700">
+        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
+          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+            <div className="p-5 border-b border-slate-200/60 dark:border-slate-700/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
                 <span className="font-bold text-slate-800 dark:text-white text-base tracking-tight">SportsDay Pro</span>
