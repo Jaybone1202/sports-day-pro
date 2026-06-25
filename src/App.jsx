@@ -3800,8 +3800,8 @@ const SchoolRegistration = ({ onSuccess, onBack }) => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-sky-500 rounded-2xl shadow-lg shadow-sky-900/50 mb-3">
-            <Trophy size={28} className="text-white"/>
+          <div className="mb-3">
+            <img src="/favicon.svg" width="72" height="72" alt="SportsDay Pro"/>
           </div>
           <h1 className="text-2xl font-black text-white">Register Your School</h1>
           <p className="text-slate-400 text-sm mt-1">Get started with SportsDay Pro</p>
@@ -4372,8 +4372,8 @@ const LoginView = ({ onLogin, onNavigate }) => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-sky-500 rounded-2xl shadow-lg shadow-sky-900/50 mb-4">
-            <Trophy size={32} className="text-white"/>
+          <div className="mb-4">
+            <img src="/favicon.svg" width="80" height="80" alt="SportsDay Pro"/>
           </div>
           <h1 className="text-3xl font-black text-white">SportsDay Pro</h1>
           <p className="text-slate-400 mt-2 text-sm">Run your school sports day with confidence</p>
