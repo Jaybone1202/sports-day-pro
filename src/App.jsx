@@ -1537,7 +1537,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                     </div>
                                   </td>
                                 </tr>
-                                {expandedActivity === act.id && (
+                                {expandedActivity === act.id ? (
                                   <tr className="bg-sky-50/60 dark:bg-sky-900/10">
                                     <td colSpan={!staffSeeAll && selectedEventId !== 'new' ? 6 : 5} className="px-4 py-3">
                                       <div className="flex flex-wrap gap-4 items-start">
@@ -1594,7 +1594,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                       </div>
                                     </td>
                                   </tr>
-                                )}
+                                ) : null}
                               ))}
                             </tbody>
                           </table>
