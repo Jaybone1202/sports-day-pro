@@ -400,7 +400,7 @@ const FlagsModule = ({ user, showToast, onCountChange }) => {
   useEffect(() => { fetchFlags(); }, [fetchFlags]);
 
   const handleResolve = async (id) => {
-    const { error } = await supabase.from('event_flags').update({ status: 'resolved' }).eq('id', id);
+    const { error } = await supabase.from('event_flags').update({ status: 'resolved' }).eq('id', id).eq('school_id', user.school_id);
     if (error) { showToast('Failed to resolve flag', 'error'); return; }
     showToast('Flag marked as resolved');
     setFlags(prev => {
@@ -411,7 +411,7 @@ const FlagsModule = ({ user, showToast, onCountChange }) => {
   };
 
   const handleReopen = async (id) => {
-    const { error } = await supabase.from('event_flags').update({ status: 'open' }).eq('id', id);
+    const { error } = await supabase.from('event_flags').update({ status: 'open' }).eq('id', id).eq('school_id', user.school_id);
     if (error) { showToast('Failed to reopen flag', 'error'); return; }
     showToast('Flag reopened');
     setFlags(prev => {
@@ -1064,7 +1064,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     } else if (type === 'event') {
       setIsSaving(true);
       try {
-        await supabase.from('events').delete().eq('id', item);
+        await supabase.from('events').delete().eq('id', item).eq('school_id', user.school_id);
         setEvents(prev => prev.filter(e => e.id !== item));
         handleEventSelect(embedded ? null : 'new');
         showToast('Event deleted successfully.');
@@ -1078,13 +1078,13 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     setEventIsLocked(next);
     setEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, is_locked: next } : e));
     setLockConfirm(false);
-    await supabase.from('events').update({ is_locked: next }).eq('id', selectedEventId);
+    await supabase.from('events').update({ is_locked: next }).eq('id', selectedEventId).eq('school_id', user.school_id);
     showToast(next ? 'Event locked — staff cannot save new scores' : 'Event unlocked');
   };
 
   const handleEndEvent = async () => {
     setEndEventConfirm(false);
-    await supabase.from('events').update({ is_locked: true, is_active: false }).eq('id', selectedEventId);
+    await supabase.from('events').update({ is_locked: true, is_active: false }).eq('id', selectedEventId).eq('school_id', user.school_id);
     setEventIsLocked(true);
     setEventIsActive(false);
     setEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, is_locked: true, is_active: false } : e));
@@ -1094,7 +1094,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const handleToggleStaffSeeAll = async () => {
     const next = !staffSeeAll;
     setStaffSeeAll(next);
-    await supabase.from('events').update({ staff_see_all: next }).eq('id', selectedEventId);
+    await supabase.from('events').update({ staff_see_all: next }).eq('id', selectedEventId).eq('school_id', user.school_id);
   };
 
   const handleSaveTypeDefault = async (actType, field, value) => {
@@ -1126,7 +1126,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
         if (evtErr) throw evtErr;
         targetEventId = evtData.id;
       } else {
-        const { error: evtErr } = await supabase.from('events').update({ name: eventName, event_date: eventDate, is_active: eventIsActive }).eq('id', selectedEventId);
+        const { error: evtErr } = await supabase.from('events').update({ name: eventName, event_date: eventDate, is_active: eventIsActive }).eq('id', selectedEventId).eq('school_id', user.school_id);
         if (evtErr) throw evtErr;
       }
 
@@ -1775,6 +1775,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   const [isLoading, setIsLoading]     = useState(true);
   const [searchTerm, setSearchTerm]   = useState('');
   const [sortConfig, setSortConfig]   = useState({ key: 'last_name', direction: 'asc' });
+  const [deleteStudentModal, setDeleteStudentModal] = useState({ isOpen: false, id: null, name: '' });
 
   // Staff state
   const [staffList, setStaffList]     = useState([]);
@@ -1821,6 +1822,15 @@ const StudentDirectoryModule = ({ user, showToast }) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
   };
 
+  const handleDeleteStudent = async () => {
+    const { id, name } = deleteStudentModal;
+    setDeleteStudentModal({ isOpen: false, id: null, name: '' });
+    const { error } = await supabase.from('students').delete().eq('id', id).eq('school_id', user.school_id);
+    if (error) { showToast('Failed to remove student', 'error'); return; }
+    setStudents(prev => prev.filter(s => s.id !== id));
+    showToast(`${name} removed from directory`);
+  };
+
   const filteredAndSorted = React.useMemo(() => {
     let result = students;
     if (searchTerm) {
@@ -1862,7 +1872,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   };
 
   const handleRoleChange = async (staffId, newRole) => {
-    const { error } = await supabase.from('users').update({ role: newRole }).eq('id', staffId);
+    const { error } = await supabase.from('users').update({ role: newRole }).eq('id', staffId).eq('school_id', user.school_id);
     if (error) { showToast('Failed to update role', 'error'); return; }
     setEditingRoleId(null);
     showToast('Role updated');
@@ -1872,7 +1882,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   const handleRemoveStaff = async () => {
     const { id: staffId, name } = removeModal;
     setRemoveModal({ isOpen: false, id: null, name: '' });
-    const { error } = await supabase.from('users').delete().eq('id', staffId);
+    const { error } = await supabase.from('users').delete().eq('id', staffId).eq('school_id', user.school_id);
     if (error) { showToast('Failed to remove staff member', 'error'); return; }
     showToast(`${name} removed`);
     fetchStaff();
@@ -1881,6 +1891,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   return (
     <div className="space-y-6">
       <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school?\n\nNote: their login account remains active in the system — only their school access is revoked. Contact your Supabase admin to fully delete the account if needed.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
+      <ConfirmModal isOpen={deleteStudentModal.isOpen} title="Remove Student" message={`Permanently remove ${deleteStudentModal.name} from the directory?\n\nThis satisfies a POPIA right-to-erasure request. Their results and trial records will remain in the database and must be removed separately if required.`} confirmText="Remove" onConfirm={handleDeleteStudent} onCancel={() => setDeleteStudentModal({ isOpen: false, id: null, name: '' })}/>
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -1923,6 +1934,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
                       <p className="font-semibold text-slate-900 dark:text-white text-sm">{student.last_name}, {student.first_name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{student.class} · {student.age_group} · {student.gender} · {student.house || 'Unassigned'}</p>
                     </div>
+                    <button onClick={() => setDeleteStudentModal({ isOpen: true, id: student.id, name: `${student.first_name} ${student.last_name}` })} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors" title="Remove student"><Trash2 size={14}/></button>
                   </div>
                 ))}
               </div>
@@ -1930,7 +1942,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
               <div className="hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto">
                 <table className="w-full text-sm text-left relative">
                   <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10 shadow-sm">
-                    <tr><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/></tr>
+                    <tr><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/><th className="px-4 py-3 w-12"></th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredAndSorted.map((student, index) => {
@@ -1941,14 +1953,15 @@ const StudentDirectoryModule = ({ user, showToast }) => {
                       if (index === 0 && !['last_name','first_name'].includes(sortConfig.key)) { showSep = true; sepLabel = student[sortConfig.key]; }
                       return (
                         <React.Fragment key={student.id}>
-                          {showSep && <tr className="bg-slate-100/80 dark:bg-slate-700/40"><td colSpan="6" className="px-4 py-1.5 font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider border-y border-slate-200 dark:border-slate-600">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
-                          <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                          {showSep && <tr className="bg-slate-100/80 dark:bg-slate-700/40"><td colSpan="7" className="px-4 py-1.5 font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider border-y border-slate-200 dark:border-slate-600">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
+                          <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{student.last_name}</td>
                             <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{student.first_name}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{student.class}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.age_group}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.gender}</td>
                             <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
+                            <td className="px-4 py-3 text-right"><button onClick={() => setDeleteStudentModal({ isOpen: true, id: student.id, name: `${student.first_name} ${student.last_name}` })} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all" title="Remove student"><Trash2 size={14}/></button></td>
                           </tr>
                         </React.Fragment>
                       );
@@ -3188,9 +3201,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     } catch (e) { showToast('Failed to manually update record.', 'error'); }
   };
 
+  const isValidScore = (v) => { const n = parseFloat(v); return isFinite(n) && n >= 0 && n < 100000; };
+
   const handleSaveResults = async () => {
     const withScores = Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '');
     if (withScores.length === 0) { showToast('No scores entered.', 'error'); return; }
+    const invalid = withScores.filter(id => !isValidScore(scores[id]));
+    if (invalid.length > 0) { showToast('One or more scores are invalid. Check for negative or non-numeric values.', 'error'); return; }
     setIsSaving(true);
     try {
       if (isTrial) {
@@ -3931,7 +3948,7 @@ const ParentPortal = ({ onNavigate }) => {
     try {
       const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender').eq('event_id', eventId);
       if (!activities || activities.length === 0) return;
-      const { data: results } = await supabase.from('event_results').select('*, students(*)').in('event_activity_id', activities.map(a => a.id)).order('recorded_at', { ascending: false });
+      const { data: results } = await supabase.from('event_results').select('*, students(first_name, last_name, house)').in('event_activity_id', activities.map(a => a.id)).order('recorded_at', { ascending: false });
       if (!results) return;
 
       // FIX: Use shared calculateStandings — also mutates results with calculated_points
@@ -4209,24 +4226,19 @@ const ParentPortal = ({ onNavigate }) => {
 
 const PublicRecordBoard = ({ schoolId }) => {
   const [records, setRecords]   = useState([]);
-  const [schools, setSchools]   = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterAge, setFilterAge] = useState('All');
 
   useEffect(() => {
     const fetch = async () => {
-      const [{ data: recs }, { data: scs }] = await Promise.all([
-        supabase.from('historical_records').select('*').order('activity_name').order('age_group'),
-        supabase.from('schools').select('id, name'),
-      ]);
+      const { data: recs } = await supabase.from('historical_records').select('*').eq('school_id', schoolId).order('activity_name').order('age_group');
       setRecords(recs || []);
-      setSchools(scs || []);
       setIsLoading(false);
     };
     fetch();
-  }, []);
+  }, [schoolId]);
 
-  const schoolName = (id) => schools.find(s => s.id === id)?.name || 'Unknown';
+  const schoolName = () => '';
   const ageGroups  = [...new Set(records.map(r => r.age_group))].sort();
   const filtered   = filterAge === 'All' ? records : records.filter(r => r.age_group === filterAge);
   const activities = [...new Set(filtered.map(r => r.activity_name))].sort();
@@ -5055,7 +5067,8 @@ export default function App() {
             const isAdmin = ['organiser', 'super_admin'].includes(userData.role);
             // Try to restore the hash-encoded view
             const nav = HASH_TO_NAV[window.location.hash];
-            if (nav && ((isAdmin && nav.route !== 'staff-dashboard') || (!isAdmin && nav.route === 'staff-dashboard'))) {
+            const isSA = userData.role === 'super_admin';
+            if (nav && ((isAdmin && nav.route !== 'staff-dashboard' && (nav.route !== 'super-admin' || isSA)) || (!isAdmin && nav.route === 'staff-dashboard'))) {
               setCurrentRoute(nav.route);
               if (nav.view) setOrganiserView(nav.view);
             } else {
@@ -5172,7 +5185,7 @@ export default function App() {
       {currentRoute === 'login'    && <ErrorBoundary context="login"><LoginView onLogin={handleLogin} onNavigate={setCurrentRoute}/></ErrorBoundary>}
       {currentRoute === 'parent'   && <ErrorBoundary context="parent portal"><ParentPortal onNavigate={setCurrentRoute}/></ErrorBoundary>}
       {currentRoute === 'register' && <ErrorBoundary context="registration"><SchoolRegistration onSuccess={handleLogin} onBack={() => setCurrentRoute('login')}/></ErrorBoundary>}
-      {currentRoute === 'super-admin' && user && (
+      {currentRoute === 'super-admin' && user && isSuperAdmin && (
         <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
           <aside className="w-56 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
             <div className="p-5 border-b border-slate-200/60">
