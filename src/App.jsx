@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -208,6 +209,29 @@ const validateStudent = (row) => {
 // 3. SHARED UI COMPONENTS
 // ==========================================
 
+const fadeSlideUp = {
+  initial:   { opacity: 0, y: 16 },
+  animate:   { opacity: 1, y: 0, transition: { duration: 0.28, ease: 'easeOut' } },
+  exit:      { opacity: 0, y: -8, transition: { duration: 0.18, ease: 'easeIn' } },
+};
+
+const staggerContainer = {
+  animate: { transition: { staggerChildren: 0.07 } },
+};
+
+const staggerItem = {
+  initial: { opacity: 0, y: 20, scale: 0.97 },
+  animate: { opacity: 1, y: 0,  scale: 1,    transition: { duration: 0.25, ease: 'easeOut' } },
+};
+
+const PageTransition = ({ children, keyProp }) => (
+  <AnimatePresence mode="wait">
+    <motion.div key={keyProp} {...fadeSlideUp} className="h-full">
+      {children}
+    </motion.div>
+  </AnimatePresence>
+);
+
 const Card = ({ children, className = '' }) => (
   <div className={`bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 ${className}`}>
     {children}
@@ -269,11 +293,12 @@ const StatCard = ({ icon: Icon, label, value, color = 'sky' }) => {
     blue:    'bg-sky-50 text-sky-500 dark:bg-sky-900/30 dark:text-sky-400',
   };
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+    <motion.div variants={staggerItem}
+      className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className={`inline-flex p-2.5 rounded-xl mb-3 ${colors[color] || colors.sky}`}><Icon size={20}/></div>
       <p className="text-3xl font-black text-slate-800 dark:text-white">{value}</p>
       <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">{label}</p>
-    </div>
+    </motion.div>
   );
 };
 
@@ -1137,13 +1162,13 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
               <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Click "New Event" to get started.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            <motion.div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3" variants={staggerContainer} initial="initial" animate="animate">
               {events.map(evt => {
                 const isSelected = selectedEventId === evt.id;
                 const ended = evt.is_locked && !evt.is_active;
                 const locked = evt.is_locked && !ended;
                 return (
-                  <button key={evt.id} onClick={() => handleEventSelect(evt.id)}
+                  <motion.button variants={staggerItem} key={evt.id} onClick={() => handleEventSelect(evt.id)}
                     className={`text-left p-4 rounded-xl border-2 transition-all ${
                       isSelected
                         ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/20 shadow-md'
@@ -1176,10 +1201,10 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                         </span>
                       )}
                     </div>
-                  </button>
+                  </motion.button>
                 );
               })}
-            </div>
+            </motion.div>
           )}
 
           {selectedEventId && (
@@ -2112,13 +2137,13 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
     if (currentView === 'dashboard') fetchStats();
   }, [user, currentView]);
 
-  if (currentView === 'import')      return <DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
-  if (currentView === 'planning') return <PlanningModule user={user} showToast={showToast}/>;
-  if (currentView === 'students')    return <StudentDirectoryModule user={user} showToast={showToast}/>;
-  if (currentView === 'standings')   return <LiveStandingsModule user={user}/>;
-  if (currentView === 'houses')      return <HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/>;
-  if (currentView === 'records')     return <RecordBoardModule user={user} showToast={showToast}/>;
-  if (currentView === 'flags')       return <FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/>;
+  if (currentView === 'import')    return <PageTransition keyProp="import"><DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user}/></PageTransition>;
+  if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'records')   return <PageTransition keyProp="records"><RecordBoardModule user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'flags')     return <PageTransition keyProp="flags"><FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/></PageTransition>;
 
   const setupSteps = [
     { label: 'Add staff accounts',    desc: 'Give staff login access to enter results',   view: 'students',    done: staffCount > 0,  icon: UserPlus },
@@ -2130,6 +2155,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   const allDone   = setupDone === setupSteps.length;
 
   return (
+    <PageTransition keyProp="dashboard">
     <div className="space-y-6">
       {/* Welcome banner */}
       <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-2xl p-6 text-white">
@@ -2139,7 +2165,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <motion.div className="grid grid-cols-1 md:grid-cols-3 gap-4" variants={staggerContainer} initial="initial" animate="animate">
         {isLoadingCount ? (
           <div className="col-span-3 flex justify-center py-8"><Loader2 className="animate-spin text-slate-300" size={28}/></div>
         ) : (
@@ -2149,7 +2175,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
             <StatCard icon={Activity} label="Active Trials"     value={trialCount}   color="purple"/>
           </>
         )}
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Getting started checklist */}
@@ -2210,6 +2236,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
         </div>
       </div>
     </div>
+    </PageTransition>
   );
 };
 
@@ -4220,12 +4247,12 @@ const SuperAdminPanel = ({ user, onBack }) => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <motion.div className="grid grid-cols-2 md:grid-cols-4 gap-4" variants={staggerContainer} initial="initial" animate="animate">
         <StatCard icon={Building2} label="Schools"        value={totalSchools}  color="purple"/>
         <StatCard icon={Users}     label="Total Users"    value={totalUsers}    color="blue"/>
         <StatCard icon={Activity}  label="Total Students" value={totalStudents} color="emerald"/>
         <StatCard icon={Trophy}    label="Total Events"   value={allEvents.length} color="amber"/>
-      </div>
+      </motion.div>
 
       {/* Platform feature toggles */}
       <Card>
