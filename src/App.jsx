@@ -233,7 +233,7 @@ const PageTransition = ({ children, keyProp }) => (
 );
 
 const Card = ({ children, className = '' }) => (
-  <div className={`bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-2xl shadow-sm hover:shadow-md border border-slate-200/60 dark:border-slate-700/60 p-6 transition-shadow duration-200 ${className}`}>
+  <div className={`bg-white/60 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl shadow-sm hover:shadow-md border border-white/80 dark:border-slate-700/60 p-6 transition-shadow duration-200 ${className}`}>
     {children}
   </div>
 );
@@ -294,7 +294,7 @@ const StatCard = ({ icon: Icon, label, value, color = 'sky' }) => {
   };
   return (
     <motion.div variants={staggerItem}
-      className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-5 shadow-sm hover:shadow-lg transition-all duration-200 group">
+      className="bg-white/60 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl border border-white/80 dark:border-slate-700/60 p-5 shadow-sm hover:shadow-lg transition-all duration-200 group">
       <div className={`inline-flex p-2.5 rounded-xl mb-3 shadow-sm group-hover:scale-110 transition-transform duration-200 ${colors[color] || colors.sky}`}><Icon size={20}/></div>
       <p className="text-3xl font-black text-slate-800 dark:text-white">{value}</p>
       <p className="text-sm text-slate-500 dark:text-slate-400 font-medium mt-0.5">{label}</p>
@@ -1176,7 +1176,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                         ? 'border-rose-200 dark:border-rose-800 bg-rose-50/80 dark:bg-rose-900/10 hover:border-rose-300 hover:shadow-md'
                         : locked
                         ? 'border-amber-300 dark:border-amber-700 bg-amber-50/80 dark:bg-amber-900/10 hover:border-amber-400 hover:shadow-md'
-                        : 'border-slate-200/80 dark:border-slate-700/80 bg-white/80 dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600 hover:shadow-md'
+                        : 'border-white/80 dark:border-slate-700/80 bg-white/60 dark:bg-slate-800/60 hover:border-sky-200 dark:hover:border-slate-600 hover:shadow-md'
                     }`}>
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <span className="font-semibold text-slate-900 dark:text-white text-sm leading-tight">{evt.name}</span>
@@ -2493,10 +2493,10 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   return (
                     <div key={activity.id}
                       onClick={() => !isLocked && onSelectActivity({ id: activity.id, name: activity.name, type: activity.activity_type, scoringType: activity.scoring_type || 'metric', ageGroup: activity.age_group, gender: activity.gender, participantsPerHouse: activity.participants_per_house || 2, isLocked })}
-                      className={`rounded-xl shadow-sm border p-5 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between backdrop-blur-sm
-                        ${isLocked ? 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-300/60 dark:border-slate-600/60 cursor-default opacity-75' :
-                          isDone ? 'bg-emerald-50/80 dark:bg-emerald-900/20 border-emerald-200/60 dark:border-emerald-800/60 cursor-pointer hover:shadow-lg' :
-                          'bg-white/80 dark:bg-slate-800/60 border-slate-200/60 dark:border-slate-700/60 cursor-pointer hover:shadow-lg hover:border-sky-400/60'}`}>
+                      className={`rounded-xl shadow-sm border p-5 transition-all duration-200 group relative overflow-hidden flex flex-col justify-between backdrop-blur-md
+                        ${isLocked ? 'bg-white/40 dark:bg-slate-800/40 border-white/60 dark:border-slate-600/60 cursor-default opacity-75' :
+                          isDone ? 'bg-emerald-50/70 dark:bg-emerald-900/20 border-emerald-200/60 dark:border-emerald-800/60 cursor-pointer hover:shadow-lg' :
+                          'bg-white/60 dark:bg-slate-800/60 border-white/80 dark:border-slate-700/60 cursor-pointer hover:shadow-lg hover:border-sky-400/60'}`}>
                       <div className={`absolute top-0 left-0 w-1 h-full ${isLocked ? 'bg-slate-400' : isDone ? 'bg-emerald-500' : activity.activity_type === 'track' ? 'bg-sky-500' : activity.activity_type === 'field' ? 'bg-amber-500' : 'bg-purple-500'}`}/>
                       <div>
                         <div className="flex justify-between items-start mb-3 pl-2">
@@ -4679,8 +4679,8 @@ export default function App() {
       {currentRoute === 'parent'   && <ParentPortal onNavigate={setCurrentRoute}/>}
       {currentRoute === 'register' && <SchoolRegistration onSuccess={handleLogin} onBack={() => setCurrentRoute('login')}/>}
       {currentRoute === 'super-admin' && user && (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
-          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+        <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
+          <aside className="w-56 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
             <div className="p-5 border-b border-slate-200/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
@@ -4708,7 +4708,7 @@ export default function App() {
 
       {/* ---- ORGANISER DASHBOARD ---- */}
       {currentRoute === 'organiser-dashboard' && ['organiser', 'super_admin'].includes(user?.role) && (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
+        <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
           {/* Mobile nav overlay */}
           {mobileNavOpen && (
             <div className="fixed inset-0 z-50 md:hidden" onClick={() => setMobileNavOpen(false)}>
@@ -4729,7 +4729,7 @@ export default function App() {
           )}
 
           {/* Desktop sidebar */}
-          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+          <aside className="w-56 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
             <div className="p-5 border-b border-slate-200/60 dark:border-slate-700/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
@@ -4777,8 +4777,8 @@ export default function App() {
 
       {/* ---- STAFF DASHBOARD ---- */}
       {currentRoute === 'staff-dashboard' && user && (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50/40 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
-          <aside className="w-56 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+        <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
+          <aside className="w-56 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex hide-on-print flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
             <div className="p-5 border-b border-slate-200/60 dark:border-slate-700/60">
               <div className="flex items-center gap-2.5">
                 <img src="/favicon.svg" width="32" height="32" alt="SportsDay Pro"/>
