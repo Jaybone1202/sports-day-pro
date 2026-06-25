@@ -52,6 +52,60 @@ import {
 } from 'lucide-react';
 
 // ==========================================
+// 0. ERROR BOUNDARY
+// ==========================================
+
+export class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error('SportsDay Pro error boundary caught:', error, info);
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 flex items-center justify-center p-6">
+        <div className="bg-white rounded-2xl shadow-lg border border-slate-200 p-8 max-w-md w-full text-center">
+          <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Something went wrong</h2>
+          <p className="text-slate-500 text-sm mb-6">
+            {this.props.context
+              ? `An error occurred in ${this.props.context}. Your data is safe — reload to continue.`
+              : 'An unexpected error occurred. Your data is safe — reload to continue.'}
+          </p>
+          {this.state.error?.message && (
+            <p className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 mb-5 font-mono text-left break-all">
+              {this.state.error.message}
+            </p>
+          )}
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => this.setState({ hasError: false, error: null })}
+              className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-slate-50 transition-colors">
+              Try again
+            </button>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-semibold hover:bg-sky-600 transition-colors">
+              Reload app
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
+
+// ==========================================
 // 1. CONSTANTS & GLOBALS
 // ==========================================
 
@@ -5076,9 +5130,9 @@ export default function App() {
 
       <Toast toast={toastConfig}/>
 
-      {currentRoute === 'login'    && <LoginView onLogin={handleLogin} onNavigate={setCurrentRoute}/>}
-      {currentRoute === 'parent'   && <ParentPortal onNavigate={setCurrentRoute}/>}
-      {currentRoute === 'register' && <SchoolRegistration onSuccess={handleLogin} onBack={() => setCurrentRoute('login')}/>}
+      {currentRoute === 'login'    && <ErrorBoundary context="login"><LoginView onLogin={handleLogin} onNavigate={setCurrentRoute}/></ErrorBoundary>}
+      {currentRoute === 'parent'   && <ErrorBoundary context="parent portal"><ParentPortal onNavigate={setCurrentRoute}/></ErrorBoundary>}
+      {currentRoute === 'register' && <ErrorBoundary context="registration"><SchoolRegistration onSuccess={handleLogin} onBack={() => setCurrentRoute('login')}/></ErrorBoundary>}
       {currentRoute === 'super-admin' && user && (
         <div className="min-h-screen bg-gradient-to-br from-sky-100 via-blue-50 to-indigo-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex">
           <aside className="w-56 bg-white/70 dark:bg-slate-900/80 backdrop-blur-xl flex-col hidden md:flex flex-shrink-0 border-r border-slate-200/60 dark:border-slate-700/60 shadow-sm">
@@ -5170,7 +5224,7 @@ export default function App() {
               </div>
             </div>
             <div className="p-4 md:p-8 max-w-6xl mx-auto relative print-container">
-              <OrganiserDashboard user={user} currentView={organiserView} setCurrentView={setOrganiserView} showToast={showToast} onFlagsChange={setOpenFlagCount}/>
+              <ErrorBoundary context="organiser dashboard"><OrganiserDashboard user={user} currentView={organiserView} setCurrentView={setOrganiserView} showToast={showToast} onFlagsChange={setOpenFlagCount}/></ErrorBoundary>
             </div>
           </main>
         </div>
@@ -5219,7 +5273,7 @@ export default function App() {
               </div>
             </div>
             <div className="p-4 md:p-8 max-w-6xl mx-auto relative print-container">
-              <StaffDashboard user={user} showToast={showToast}/>
+              <ErrorBoundary context="staff dashboard"><StaffDashboard user={user} showToast={showToast}/></ErrorBoundary>
             </div>
           </main>
         </div>
