@@ -895,6 +895,8 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
   const [lockConfirm, setLockConfirm]       = useState(false);
   const [endEventConfirm, setEndEventConfirm] = useState(false);
   const [openAssignDropdown, setOpenAssignDropdown] = useState(null);
+  const [typeDefaults, setTypeDefaults]     = useState({});
+  const [expandedActivity, setExpandedActivity] = useState(null);
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -907,6 +909,10 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
         setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase());
         const { data: sData } = await supabase.from('users').select('id, first_name, last_name').eq('school_id', user.school_id).eq('role', 'staff');
         setStaffList(sData || []);
+        const { data: tdData } = await supabase.from('activity_type_defaults').select('*').eq('school_id', user.school_id);
+        const tdMap = {};
+        (tdData || []).forEach(d => { tdMap[d.activity_type] = { attemptsEnabled: d.attempts_enabled, maxAttempts: d.max_attempts, tiebreakEnabled: d.tiebreak_enabled, tiebreakType: d.tiebreak_type, unit: d.unit, higherIsBetter: d.higher_is_better }; });
+        setTypeDefaults(tdMap);
       } catch (err) { console.error('Error fetching data:', err); } finally { setIsLoading(false); }
     };
     fetchAll();
@@ -941,7 +947,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
           normalizeString(r.age_group)     === normalizeString(a.age_group) &&
           normalizeString(r.gender)        === normalizeString(a.gender)
         );
-        return { id: a.id, name: a.name, type: a.activity_type, scoringType: a.scoring_type || 'metric', ageGroup: a.age_group, gender: a.gender, participantsPerHouse: a.participants_per_house || 2, recordValue: rec ? rec.record_value : '', recordHolder: rec ? rec.record_holder : '' };
+        return { id: a.id, name: a.name, type: a.activity_type, scoringType: a.scoring_type || 'metric', ageGroup: a.age_group, gender: a.gender, participantsPerHouse: a.participants_per_house || 2, recordValue: rec ? rec.record_value : '', recordHolder: rec ? rec.record_holder : '', attemptsEnabled: a.attempts_enabled ?? false, maxAttempts: a.max_attempts ?? 3, tiebreakEnabled: a.tiebreak_enabled ?? false, tiebreakType: a.tiebreak_type ?? 'sudden_death', unit: a.unit ?? 'm', higherIsBetter: a.higher_is_better ?? true };
       }));
     } catch (err) { console.error('Error fetching activities', err); } finally { setIsLoading(false); }
   };
@@ -979,7 +985,8 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     if (!newActivity.name.trim()) return;
     const isDup = activities.some(a => a.name.toLowerCase() === newActivity.name.toLowerCase() && a.ageGroup === newActivity.ageGroup && a.gender === newActivity.gender);
     if (isDup) { showToast('This exact activity already exists for this age group and gender.', 'error'); return; }
-    setActivities(prev => [...prev, { ...newActivity, id: `temp-${Date.now()}` }]);
+    const td = typeDefaults[newActivity.type] || {};
+    setActivities(prev => [...prev, { ...newActivity, id: `temp-${Date.now()}`, attemptsEnabled: td.attemptsEnabled ?? false, maxAttempts: td.maxAttempts ?? 3, tiebreakEnabled: td.tiebreakEnabled ?? false, tiebreakType: td.tiebreakType ?? 'sudden_death', unit: td.unit ?? 'm', higherIsBetter: td.higherIsBetter ?? true }]);
     setNewActivity(prev => ({ ...prev, name: '', recordValue: '', recordHolder: '' }));
   };
 
@@ -1036,6 +1043,13 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     await supabase.from('events').update({ staff_see_all: next }).eq('id', selectedEventId);
   };
 
+  const handleSaveTypeDefault = async (actType, field, value) => {
+    const current = typeDefaults[actType] || { attemptsEnabled: false, maxAttempts: 3, tiebreakEnabled: false, tiebreakType: 'sudden_death', unit: 'm', higherIsBetter: true };
+    const updated = { ...current, [field]: value };
+    setTypeDefaults(prev => ({ ...prev, [actType]: updated }));
+    await supabase.from('activity_type_defaults').upsert({ school_id: user.school_id, activity_type: actType, attempts_enabled: updated.attemptsEnabled, max_attempts: updated.maxAttempts, tiebreak_enabled: updated.tiebreakEnabled, tiebreak_type: updated.tiebreakType, unit: updated.unit, higher_is_better: updated.higherIsBetter }, { onConflict: 'school_id,activity_type' });
+  };
+
   const handleToggleAssignment = async (activityId, staffId) => {
     const current = assignments[activityId] || [];
     const isAssigned = current.includes(staffId);
@@ -1062,8 +1076,9 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
         if (evtErr) throw evtErr;
       }
 
-      const toInsert = activities.filter(a => a.id.startsWith('temp-')).map(a => ({ event_id: targetEventId, name: a.name.trim(), activity_type: a.type, scoring_type: a.scoringType || 'metric', age_group: a.ageGroup, gender: a.gender, participants_per_house: a.participantsPerHouse }));
-      const toUpdate = activities.filter(a => !a.id.startsWith('temp-')).map(a => ({ id: a.id, event_id: targetEventId, name: a.name.trim(), activity_type: a.type, scoring_type: a.scoringType || 'metric', age_group: a.ageGroup, gender: a.gender, participants_per_house: a.participantsPerHouse }));
+      const mapActivity = (a, extra = {}) => ({ ...extra, name: a.name.trim(), activity_type: a.type, scoring_type: a.scoringType || 'metric', age_group: a.ageGroup, gender: a.gender, participants_per_house: a.participantsPerHouse, attempts_enabled: a.attemptsEnabled ?? false, max_attempts: a.maxAttempts ?? 3, tiebreak_enabled: a.tiebreakEnabled ?? false, tiebreak_type: a.tiebreakType ?? 'sudden_death', unit: a.unit ?? 'm', higher_is_better: a.higherIsBetter ?? true });
+      const toInsert = activities.filter(a => a.id.startsWith('temp-')).map(a => mapActivity(a, { event_id: targetEventId }));
+      const toUpdate = activities.filter(a => !a.id.startsWith('temp-')).map(a => mapActivity(a, { id: a.id, event_id: targetEventId }));
 
       if (toInsert.length > 0) await supabase.from('event_activities').insert(toInsert);
       if (toUpdate.length > 0) {
@@ -1298,6 +1313,75 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                       </button>
                     )}
                   </Card>
+
+                  <Card>
+                    <h3 className="font-semibold text-slate-900 dark:text-white border-b dark:border-slate-700 pb-2 mb-4 flex items-center gap-2"><Settings size={18}/> Scoring Defaults by Type</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Set once — new activities inherit these. Override per-activity with the <Settings size={11} className="inline"/> button in the activity list.</p>
+                    <div className="space-y-4">
+                      {[
+                        { type: 'track',         label: 'Track',         defaultUnit: 'seconds', defaultHigher: false },
+                        { type: 'field',          label: 'Field',         defaultUnit: 'm',       defaultHigher: true  },
+                        { type: 'long_distance',  label: 'Long Distance', defaultUnit: 'minutes', defaultHigher: false },
+                      ].map(({ type, label, defaultUnit, defaultHigher }) => {
+                        const d = typeDefaults[type] || { attemptsEnabled: false, maxAttempts: 3, tiebreakEnabled: false, tiebreakType: 'sudden_death', unit: defaultUnit, higherIsBetter: defaultHigher };
+                        return (
+                          <div key={type} className="border border-slate-200 dark:border-slate-700 rounded-xl p-3 space-y-3">
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{label}</p>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Multiple attempts</p>
+                                <p className="text-[11px] text-slate-400">Best attempt counts as result</p>
+                              </div>
+                              <button type="button" onClick={() => handleSaveTypeDefault(type, 'attemptsEnabled', !d.attemptsEnabled)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${d.attemptsEnabled ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${d.attemptsEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}`}/>
+                              </button>
+                            </div>
+                            {d.attemptsEnabled && (
+                              <>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs text-slate-500 dark:text-slate-400 flex-1">Max attempts</p>
+                                  <div className="flex gap-1">
+                                    {[2,3,5].map(n => (
+                                      <button key={n} type="button" onClick={() => handleSaveTypeDefault(type, 'maxAttempts', n)}
+                                        className={`w-8 h-7 rounded text-xs font-semibold border transition-colors ${d.maxAttempts === n ? 'bg-sky-500 text-white border-sky-500' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-sky-400'}`}>
+                                        {n}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Tie-break (sudden death)</p>
+                                    <p className="text-[11px] text-slate-400">Jump-off / throw-off rounds</p>
+                                  </div>
+                                  <button type="button" onClick={() => handleSaveTypeDefault(type, 'tiebreakEnabled', !d.tiebreakEnabled)}
+                                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${d.tiebreakEnabled ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                    <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${d.tiebreakEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}`}/>
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                            <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-700">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 flex-1">Unit</p>
+                              <select value={d.unit} onChange={e => handleSaveTypeDefault(type, 'unit', e.target.value)}
+                                className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                                <option value="m">m</option>
+                                <option value="cm">cm</option>
+                                <option value="seconds">seconds</option>
+                                <option value="minutes">minutes</option>
+                              </select>
+                              <select value={d.higherIsBetter ? 'higher' : 'lower'} onChange={e => handleSaveTypeDefault(type, 'higherIsBetter', e.target.value === 'higher')}
+                                className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                                <option value="higher">Higher wins</option>
+                                <option value="lower">Lower wins</option>
+                              </select>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
                 </div>
 
                 <div className="space-y-6 lg:col-span-2">
@@ -1446,8 +1530,71 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                       ) : <span className="text-xs text-slate-400 italic">Save event first</span>}
                                     </td>
                                   )}
-                                  <td className="px-4 py-3 text-right"><button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button></td>
+                                  <td className="px-4 py-3 text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button title="Attempt settings" onClick={() => setExpandedActivity(expandedActivity === act.id ? null : act.id)} className={`p-1 rounded transition-colors ${expandedActivity === act.id ? 'text-sky-600 bg-sky-50 dark:bg-sky-900/30' : 'text-slate-400 hover:text-sky-600'}`}><Settings size={15}/></button>
+                                      <button onClick={() => setModalConfig({ isOpen: true, item: act.id, type: 'activity' })} className="text-red-400 hover:text-red-600 p-1 transition-colors"><Trash2 size={16}/></button>
+                                    </div>
+                                  </td>
                                 </tr>
+                                {expandedActivity === act.id && (
+                                  <tr className="bg-sky-50/60 dark:bg-sky-900/10">
+                                    <td colSpan={!staffSeeAll && selectedEventId !== 'new' ? 6 : 5} className="px-4 py-3">
+                                      <div className="flex flex-wrap gap-4 items-start">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Multiple attempts</span>
+                                          <button type="button" onClick={() => handleUpdateActivityProp(act.id, 'attemptsEnabled', !act.attemptsEnabled)}
+                                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${act.attemptsEnabled ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${act.attemptsEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}`}/>
+                                          </button>
+                                        </div>
+                                        {act.attemptsEnabled && (
+                                          <>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs text-slate-500 dark:text-slate-400">Max</span>
+                                              <div className="flex gap-1">
+                                                {[2,3,5].map(n => (
+                                                  <button key={n} type="button" onClick={() => handleUpdateActivityProp(act.id, 'maxAttempts', n)}
+                                                    className={`w-7 h-6 rounded text-xs font-semibold border transition-colors ${act.maxAttempts === n ? 'bg-sky-500 text-white border-sky-500' : 'border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-sky-400 bg-white dark:bg-slate-700'}`}>
+                                                    {n}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Tie-break</span>
+                                              <button type="button" onClick={() => handleUpdateActivityProp(act.id, 'tiebreakEnabled', !act.tiebreakEnabled)}
+                                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${act.tiebreakEnabled ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                                                <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${act.tiebreakEnabled ? 'translate-x-[18px]' : 'translate-x-[3px]'}`}/>
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-slate-500 dark:text-slate-400">Unit</span>
+                                          <select value={act.unit || 'm'} onChange={e => handleUpdateActivityProp(act.id, 'unit', e.target.value)}
+                                            className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                                            <option value="m">m</option>
+                                            <option value="cm">cm</option>
+                                            <option value="seconds">seconds</option>
+                                            <option value="minutes">minutes</option>
+                                          </select>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-slate-500 dark:text-slate-400">Best is</span>
+                                          <select value={act.higherIsBetter ? 'higher' : 'lower'} onChange={e => handleUpdateActivityProp(act.id, 'higherIsBetter', e.target.value === 'higher')}
+                                            className="text-xs px-2 py-1 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                                            <option value="higher">Higher</option>
+                                            <option value="lower">Lower</option>
+                                          </select>
+                                        </div>
+                                        {act.attemptsEnabled && (
+                                          <span className="text-[11px] text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-900/30 px-2 py-1 rounded-full">Save event to apply changes</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
                               ))}
                             </tbody>
                           </table>
