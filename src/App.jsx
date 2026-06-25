@@ -2431,7 +2431,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
 
       {mode === 'events' && (
         <>
-          <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+          <div className="bg-white/60 dark:bg-slate-800/60 backdrop-blur-md p-4 rounded-xl border border-white/80 dark:border-slate-700/60 flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
             <label className="font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">Current Event:</label>
             <div className="relative w-full sm:max-w-md">
               <select value={selectedEventId} onChange={(e) => { setSelectedEventId(e.target.value); localStorage.setItem('sdp-staff-event', e.target.value); }} className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white font-medium shadow-sm appearance-none pr-8">
@@ -2452,7 +2452,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                 const done = assignedActivities.filter(a => (resultCounts[a.id] || 0) > 0).length;
                 const total = assignedActivities.length;
                 return (
-                  <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 mb-2">
+                  <div className="flex items-center gap-4 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md border border-white/80 dark:border-slate-700/60 rounded-xl px-4 py-3 mb-2">
                     <div className="flex-1">
                       <div className="flex justify-between text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">
                         <span>Activities completed</span>
