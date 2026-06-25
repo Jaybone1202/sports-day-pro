@@ -2193,42 +2193,39 @@ const LiveStandingsModule = ({ user }) => {
       </div>
 
       {/* ── PRINT-ONLY REPORT ── */}
-      <div className="print-only">
-        {/* Cover header */}
-        <div style={{ borderBottom: '3px solid #0ea5e9', paddingBottom: '14px', marginBottom: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+      <div className="print-only" style={{ fontFamily: 'Georgia, "Times New Roman", serif', color: '#0f172a' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #0f172a', paddingBottom: '12px', marginBottom: '20px' }}>
           <div>
-            {schoolName && <p style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#0ea5e9', margin: '0 0 4px' }}>{schoolName}</p>}
-            <h1 style={{ fontSize: '26px', fontWeight: 900, margin: 0, color: '#0f172a' }}>{eventName}</h1>
-            <p style={{ fontSize: '12px', color: '#64748b', margin: '4px 0 0' }}>
-              Official Results &amp; Standings
-            </p>
+            {schoolName && <p style={{ fontSize: '10px', fontWeight: 400, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#475569', margin: '0 0 6px', fontFamily: 'Arial, sans-serif' }}>{schoolName}</p>}
+            <h1 style={{ fontSize: '22px', fontWeight: 700, margin: 0, letterSpacing: '-0.01em' }}>{eventName}</h1>
+            <p style={{ fontSize: '12px', color: '#475569', margin: '4px 0 0', fontStyle: 'italic' }}>Official Results &amp; Standings</p>
           </div>
-          <p style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'right', margin: 0 }}>
-            {new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}
-          </p>
+          <div style={{ textAlign: 'right', fontFamily: 'Arial, sans-serif' }}>
+            <p style={{ fontSize: '11px', color: '#0f172a', margin: 0, fontWeight: 600 }}>{new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+            <p style={{ fontSize: '10px', color: '#64748b', margin: '3px 0 0' }}>SportsDay Pro</p>
+          </div>
         </div>
 
-        {/* House standings table */}
-        <div className="print-avoid-break" style={{ marginBottom: '28px' }}>
-          <h2 style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#475569', marginBottom: '8px' }}>Overall House Standings</h2>
+        {/* House standings */}
+        <div className="print-avoid-break" style={{ marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#475569', margin: '0 0 8px', fontFamily: 'Arial, sans-serif' }}>Overall House Standings</h2>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
-              <tr style={{ background: '#f1f5f9' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155', width: '40px' }}>Pos</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, color: '#334155' }}>House</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#334155' }}>Points</th>
+              <tr style={{ borderTop: '1px solid #cbd5e1', borderBottom: '1px solid #cbd5e1' }}>
+                <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#334155', width: '40px' }}>Pos</th>
+                <th style={{ padding: '6px 10px', textAlign: 'left', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#334155' }}>House</th>
+                <th style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#334155' }}>Points</th>
               </tr>
             </thead>
             <tbody>
               {standings.map((house, i) => {
-                const rowBg = i === 0 ? '#fffbeb' : i === 1 ? '#f8fafc' : i === 2 ? '#fdf4e7' : 'white';
-                const posColor = i === 0 ? '#b45309' : i === 1 ? '#64748b' : i === 2 ? '#92400e' : '#94a3b8';
-                const medal = i === 0 ? '1st' : i === 1 ? '2nd' : i === 2 ? '3rd' : `${i + 1}th`;
+                const ordinal = ['1st', '2nd', '3rd'][i] ?? `${i + 1}th`;
                 return (
-                  <tr key={house.name} style={{ borderBottom: '1px solid #e2e8f0', background: rowBg }}>
-                    <td style={{ padding: '10px 12px', fontWeight: 800, color: posColor, fontSize: '13px' }}>{medal}</td>
-                    <td style={{ padding: '10px 12px', fontWeight: 700, color: '#0f172a', fontSize: '15px' }}>{house.name}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, fontSize: '20px', color: '#0f172a' }}>{house.points} <span style={{ fontSize: '10px', fontWeight: 600, color: '#94a3b8' }}>pts</span></td>
+                  <tr key={house.name} style={{ borderBottom: '1px solid #e2e8f0', background: i === 0 ? '#f8f8f8' : 'white' }}>
+                    <td style={{ padding: '8px 10px', fontWeight: i === 0 ? 700 : 400, fontStyle: i === 0 ? 'normal' : 'italic', color: '#334155', fontFamily: 'Arial, sans-serif', fontSize: '12px' }}>{ordinal}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: i === 0 ? 700 : 400, fontSize: '14px' }}>{house.name}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700, fontSize: '16px', fontFamily: 'Arial, sans-serif' }}>{house.points}<span style={{ fontSize: '10px', fontWeight: 400, color: '#64748b', marginLeft: '3px' }}>pts</span></td>
                   </tr>
                 );
               })}
@@ -2241,16 +2238,24 @@ const LiveStandingsModule = ({ user }) => {
           const records = recentResults.filter(r => r.isRecord);
           if (records.length === 0) return null;
           return (
-            <div className="print-avoid-break" style={{ marginBottom: '28px', background: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: '8px', padding: '12px 14px' }}>
-              <h2 style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#92400e', marginBottom: '8px' }}>Records Broken Today</h2>
+            <div className="print-avoid-break" style={{ marginBottom: '24px', borderLeft: '3px solid #0f172a', paddingLeft: '12px' }}>
+              <h2 style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#475569', margin: '0 0 8px', fontFamily: 'Arial, sans-serif' }}>Records Set Today</h2>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
+                    <th style={{ padding: '4px 8px', textAlign: 'left', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '10px', color: '#334155' }}>Event</th>
+                    <th style={{ padding: '4px 8px', textAlign: 'left', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '10px', color: '#334155' }}>Athlete</th>
+                    <th style={{ padding: '4px 8px', textAlign: 'left', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '10px', color: '#334155' }}>House</th>
+                    <th style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 700, fontFamily: 'Arial, sans-serif', fontSize: '10px', color: '#334155' }}>Result</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {records.map(r => (
-                    <tr key={r.id} style={{ borderBottom: '1px solid #fde68a' }}>
-                      <td style={{ padding: '5px 8px', fontWeight: 700, color: '#0f172a' }}>{r.event}</td>
-                      <td style={{ padding: '5px 8px', color: '#475569' }}>{r.winner}</td>
-                      <td style={{ padding: '5px 8px', color: '#475569' }}>{r.house}</td>
-                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 800, color: '#b45309', fontFamily: 'monospace' }}>{r.metric}</td>
+                    <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>{r.event}</td>
+                      <td style={{ padding: '5px 8px', fontWeight: 600 }}>{r.winner}</td>
+                      <td style={{ padding: '5px 8px', color: '#475569', fontFamily: 'Arial, sans-serif', fontSize: '11px' }}>{r.house}</td>
+                      <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, fontFamily: 'Arial, sans-serif' }}>{r.metric}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2259,38 +2264,28 @@ const LiveStandingsModule = ({ user }) => {
           );
         })()}
 
-        {/* Results grouped by activity */}
+        {/* Results by activity */}
         {(() => {
           const grouped = {};
           recentResults.forEach(r => {
             if (!grouped[r.event]) grouped[r.event] = [];
             grouped[r.event].push(r);
           });
-          const podiumBg = ['#fffbeb', '#f8fafc', '#fdf4e7'];
-          const podiumLabel = ['1st', '2nd', '3rd'];
+          const ordinals = ['1st', '2nd', '3rd'];
           return Object.entries(grouped).map(([eventLabel, rows]) => {
             const sorted = [...rows].sort((a, b) => b.points - a.points);
             return (
-              <div key={eventLabel} className="print-avoid-break" style={{ marginBottom: '20px' }}>
-                <h3 style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#0ea5e9', borderBottom: '2px solid #e2e8f0', paddingBottom: '4px', marginBottom: '0' }}>{eventLabel}</h3>
+              <div key={eventLabel} className="print-avoid-break" style={{ marginBottom: '18px' }}>
+                <h3 style={{ fontSize: '12px', fontWeight: 700, margin: '0 0 0', borderBottom: '1px solid #0f172a', paddingBottom: '3px', fontFamily: 'Arial, sans-serif' }}>{eventLabel}</h3>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc' }}>
-                      <th style={{ padding: '5px 10px', textAlign: 'left', color: '#64748b', fontWeight: 600, width: '36px' }}>Pos</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'left', color: '#64748b', fontWeight: 600 }}>Student</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'left', color: '#64748b', fontWeight: 600 }}>House</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'center', color: '#64748b', fontWeight: 600, width: '48px' }}>Pts</th>
-                      <th style={{ padding: '5px 10px', textAlign: 'right', color: '#64748b', fontWeight: 600 }}>Result</th>
-                    </tr>
-                  </thead>
                   <tbody>
                     {sorted.map((r, ri) => (
-                      <tr key={r.id} style={{ borderBottom: '1px solid #f1f5f9', background: ri < 3 ? podiumBg[ri] : (ri % 2 === 0 ? 'white' : '#f8fafc') }}>
-                        <td style={{ padding: '5px 10px', fontWeight: 700, color: ri < 3 ? '#b45309' : '#94a3b8', fontSize: '11px' }}>{ri < 3 ? podiumLabel[ri] : `${ri + 1}`}</td>
-                        <td style={{ padding: '5px 10px', fontWeight: ri < 3 ? 700 : 500, color: '#0f172a' }}>{r.winner}</td>
-                        <td style={{ padding: '5px 10px', color: '#475569' }}>{r.house}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 700, color: '#2563eb' }}>+{r.points}</td>
-                        <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: 700, color: r.isRecord ? '#b45309' : '#0f172a', fontFamily: 'monospace' }}>
+                      <tr key={r.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '4px 8px', width: '36px', fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#475569', fontStyle: ri >= 3 ? 'italic' : 'normal' }}>{ordinals[ri] ?? `${ri + 1}th`}</td>
+                        <td style={{ padding: '4px 8px', fontWeight: ri < 3 ? 600 : 400 }}>{r.winner}</td>
+                        <td style={{ padding: '4px 8px', color: '#475569', fontFamily: 'Arial, sans-serif', fontSize: '11px' }}>{r.house}</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'center', fontFamily: 'Arial, sans-serif', fontSize: '11px', color: '#475569' }}>+{r.points} pts</td>
+                        <td style={{ padding: '4px 8px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>
                           {r.isRecord ? '* ' : ''}{r.metric}
                         </td>
                       </tr>
@@ -2302,9 +2297,9 @@ const LiveStandingsModule = ({ user }) => {
           });
         })()}
 
-        <div style={{ marginTop: '28px', borderTop: '1px solid #e2e8f0', paddingTop: '8px', fontSize: '10px', color: '#94a3b8', display: 'flex', justifyContent: 'space-between' }}>
-          <span>Generated by SportsDay Pro</span>
-          <span>{new Date().toLocaleString()}</span>
+        <div style={{ marginTop: '24px', borderTop: '1px solid #cbd5e1', paddingTop: '6px', display: 'flex', justifyContent: 'space-between', fontFamily: 'Arial, sans-serif', fontSize: '9px', color: '#94a3b8' }}>
+          <span>* denotes new school record</span>
+          <span>Generated by SportsDay Pro · {new Date().toLocaleString()}</span>
         </div>
       </div>
 
@@ -4700,15 +4695,10 @@ const SuperAdminPanel = ({ user, onBack }) => {
   const [expandedSchool, setExpandedSchool] = useState(null);
   const [recordsPublic, setRecordsPublic] = useState(false);
 
-  useEffect(() => {
-    supabase.from('schools').select('records_public').eq('id', allSchools[0]?.id ?? '').maybeSingle()
-      .then(({ data }) => { if (data) setRecordsPublic(data.records_public); });
-  }, [allSchools]);
-
   const toggleRecordsBoard = async () => {
     const next = !recordsPublic;
     setRecordsPublic(next);
-    await supabase.from('schools').update({ records_public: next }).eq('id', allSchools[0]?.id ?? '');
+    await supabase.from('schools').update({ records_public: next }).eq('id', schools[0]?.id ?? '');
   };
 
   useEffect(() => {
@@ -4723,6 +4713,10 @@ const SuperAdminPanel = ({ user, onBack }) => {
         ]);
         setSchools(sc || []); setAllUsers(us || []);
         setAllStudents(st || []); setAllEvents(ev || []);
+        if (sc && sc.length > 0) {
+          const { data: rp } = await supabase.from('schools').select('records_public').eq('id', sc[0].id).maybeSingle();
+          if (rp) setRecordsPublic(rp.records_public);
+        }
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
     fetchAll();
