@@ -3416,11 +3416,12 @@ const ParentPortal = ({ onNavigate }) => {
       const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender').eq('event_id', activeEvent.id);
       if (!activities || activities.length === 0) { setChildResults([]); return; }
 
-      // Search students by name — only first+last name, no sensitive data exposed
-      const { data: students } = await supabase.from('students')
-        .select('id, first_name, last_name, house, age_group, gender')
-        .eq('school_id', activeEvent.school_id)
-        .or(`first_name.ilike.%${term}%,last_name.ilike.%${term}%`);
+      // Search students via secure RPC — anon cannot query students table directly
+      const { data: students, error: searchErr } = await supabase.rpc('search_students_for_parent', {
+        p_access_code: activeEvent.parent_access_code,
+        p_search: term,
+      });
+      if (searchErr) throw searchErr;
 
       if (!students || students.length === 0) { setChildResults([]); return; }
 
