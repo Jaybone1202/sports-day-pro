@@ -983,7 +983,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
     if (!evt) return;
     setEventName(evt.name); setEventDate(evt.event_date); setParentCode(evt.parent_access_code); setEventIsActive(evt.is_active ?? true);
     setEventIsLocked(evt.is_locked ?? false);
-    setStaffSeeAll(evt.staff_see_all ?? true);
+    setStaffSeeAll(evt.staff_see_all ?? false);
     setIsLoading(true);
     try {
       const { data, error } = await supabase.from('event_activities').select('*').eq('event_id', eventId);
@@ -1332,10 +1332,11 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                               {eventIsLocked ? 'Unlock' : 'Lock'}
                             </button>
                           </div>
-                          <div className="flex items-center justify-between p-3 rounded-lg border-2 border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30">
+                          <div className={`flex items-center justify-between p-3 rounded-lg border-2 ${staffSeeAll ? 'border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/30'}`}>
                             <div>
                               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Show all activities to staff</p>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{staffSeeAll ? 'All staff see all activities.' : 'Assign specific activities to each staff member below.'}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{staffSeeAll ? 'Staff can see and score all activities — use assignments to restrict.' : 'Assign specific activities to each staff member below.'}</p>
+                              {staffSeeAll && <p className="text-xs text-amber-700 dark:text-amber-400 mt-1 font-medium">Warning: staff are not restricted to assigned activities.</p>}
                             </div>
                             <button type="button" onClick={handleToggleStaffSeeAll} className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${staffSeeAll ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
                               <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${staffSeeAll ? 'translate-x-6' : 'translate-x-1'}`}/>
@@ -1406,7 +1407,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Tie-break (sudden death)</p>
+                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Tie-break (szudden death)</p>
                                     <p className="text-[11px] text-slate-400">Jump-off / throw-off rounds</p>
                                   </div>
                                   <button type="button" onClick={() => handleSaveTypeDefault(type, 'tiebreakEnabled', !d.tiebreakEnabled)}
@@ -2615,6 +2616,16 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     fetchActivities();
   }, [selectedEventId, mode, refreshResultCounts]);
 
+  useEffect(() => {
+    if (!selectedEventId) return;
+    const channel = supabase.channel(`event-lock-${selectedEventId}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'events', filter: `id=eq.${selectedEventId}` }, (payload) => {
+        setAllEvents(prev => prev.map(e => e.id === selectedEventId ? { ...e, ...payload.new } : e));
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedEventId]);
+
   // FIX: Wrap fetchHistory in useCallback with selectedTrialId as dep
   // to avoid a stale closure when called from openHistorySession or handleStartTrial
   const fetchHistory = useCallback(async () => {
@@ -2952,6 +2963,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [flagMessage, setFlagMessage]       = useState('');
   const [showUnsavedWarning, setShowUnsavedWarning] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [pendingHeat, setPendingHeat] = useState(null);
+  const [showUnsavedHeatModal, setShowUnsavedHeatModal] = useState(false);
 
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
@@ -3255,7 +3268,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           showToast(`Successfully saved ${rows.length} results!`);
         }
       }
-    } catch (err) { console.error(err); showToast('Failed to save results. Check database schema.', 'error'); return; } finally { setIsSaving(false); }
+    } catch (err) { console.error(err); showToast(navigator.onLine === false ? 'No connection — scores not saved. Try again when back online.' : 'Failed to save results. Please try again.', 'error'); return; } finally { setIsSaving(false); }
 
     setIsDirty(false);
 
@@ -3397,6 +3410,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     return (
       <div className="space-y-4 relative">
         <ConfirmModal isOpen={showUnsavedWarning} title="Unsaved Scores" message="You have scores that haven't been saved yet. Leave anyway?" confirmText="Leave" onConfirm={confirmClose} onCancel={() => setShowUnsavedWarning(false)}/>
+        <ConfirmModal isOpen={showUnsavedHeatModal} title="Unsaved Scores" message="You have unsaved scores for this heat. Switch heat without saving?" confirmText="Switch anyway" onConfirm={() => { setShowUnsavedHeatModal(false); setActiveHeat(pendingHeat); setScores({}); setIsDirty(false); setPendingHeat(null); }} onCancel={() => { setShowUnsavedHeatModal(false); setPendingHeat(null); }}/>
 
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-4">
@@ -3643,7 +3657,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       {/* Heat navigation bar */}
       {heatSize !== 'All' && heatKeys.length > 1 && (
         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
-          <button onClick={() => { if (activeHeat > 1) { setActiveHeat(h => h - 1); setScores({}); setIsDirty(false); } }} disabled={activeHeat <= 1}
+          <button onClick={() => { if (activeHeat > 1) { if (isDirty) { setPendingHeat(activeHeat - 1); setShowUnsavedHeatModal(true); } else { setActiveHeat(h => h - 1); setScores({}); } } }} disabled={activeHeat <= 1}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronLeft size={20}/></button>
           <div className="flex-1 flex items-center justify-center gap-2 flex-wrap">
             {heatKeys.map(h => {
@@ -3651,7 +3665,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               const done = savedHeats.has(num);
               const active = activeHeat === num;
               return (
-                <button key={h} onClick={() => { setActiveHeat(num); setScores({}); setIsDirty(false); }}
+                <button key={h} onClick={() => { if (isDirty) { setPendingHeat(num); setShowUnsavedHeatModal(true); } else { setActiveHeat(num); setScores({}); } }}
                   className={`w-9 h-9 rounded-full text-sm font-bold transition-colors flex items-center justify-center
                     ${active ? 'bg-sky-500 text-white shadow-md' : done ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'}`}>
                   {done ? '✓' : num}
@@ -3659,7 +3673,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               );
             })}
           </div>
-          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { setActiveHeat(next); setScores({}); setIsDirty(false); } }} disabled={!groupedRoster[activeHeat + 1]}
+          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { if (isDirty) { setPendingHeat(next); setShowUnsavedHeatModal(true); } else { setActiveHeat(next); setScores({}); } } }} disabled={!groupedRoster[activeHeat + 1]}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronRight size={20}/></button>
 
           {/* Countdown timer */}
