@@ -49,6 +49,7 @@ import {
   Lock,
   Unlock,
   FlagOff,
+  Hash,
 } from 'lucide-react';
 
 // ==========================================
@@ -2135,7 +2136,9 @@ const LiveStandingsModule = ({ user }) => {
           let timeStr = '';
           try { timeStr = new Date(r.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { timeStr = 'Just now'; }
           const sd = (Array.isArray(r.students) ? r.students[0] : r.students) || {};
-          return { id: r.id, event: `${act?.age_group} ${act?.gender} ${act?.name}`, time: timeStr, winner: `${sd.first_name || 'Unknown'} ${sd.last_name || ''}`, house: sd.house || 'Unassigned', houseColor: getHouseColor(sd.house, houseColors), metric: `${r.result_value}${suffix}`, isRecord: r.is_new_record, points: r.calculated_points || 0, placing: r.placing };
+          const isPositionOnly = act?.activity_type === 'track' && parseFloat(r.result_value) >= 9000;
+          const metricDisplay = isPositionOnly ? `Pos ${Math.round(parseFloat(r.result_value)) - 9000}` : `${r.result_value}${suffix}`;
+          return { id: r.id, event: `${act?.age_group} ${act?.gender} ${act?.name}`, time: timeStr, winner: `${sd.first_name || 'Unknown'} ${sd.last_name || ''}`, house: sd.house || 'Unassigned', houseColor: getHouseColor(sd.house, houseColors), metric: metricDisplay, isRecord: r.is_new_record, points: r.calculated_points || 0, placing: r.placing };
         }));
       } catch (e) { console.error(e); } finally { setIsLoading(false); }
     };
@@ -2968,6 +2971,19 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [savedStudentIds, setSavedStudentIds] = useState(new Set());
 
+  // Per-student position override for track activities where a time isn't available
+  const [positionOverrides, setPositionOverrides] = useState({});
+  const togglePositionMode = (studentId) => {
+    setPositionOverrides(prev => {
+      const next = { ...prev };
+      if (next[studentId] !== undefined) { delete next[studentId]; }
+      else { next[studentId] = null; }
+      return next;
+    });
+    setScores(prev => { const next = { ...prev }; delete next[studentId]; return next; });
+    setIsDirty(true);
+  };
+
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
   const [currentAttemptNum, setCurrentAttemptNum] = useState(1);
@@ -3219,8 +3235,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const isValidScore = (v) => { const n = parseFloat(v); return isFinite(n) && n >= 0 && n < 100000; };
 
   const handleSaveResults = async () => {
-    const withScores = Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '');
-    if (withScores.length === 0) { showToast('No scores entered.', 'error'); return; }
+    // Merge position overrides (position-only students) into a combined result set
+    const positionRows = isHybridTrack
+      ? Object.entries(positionOverrides).filter(([, v]) => v !== null).map(([id, pos]) => ({ id, value: HYBRID_POSITION_OFFSET + pos }))
+      : [];
+    const positionIds = new Set(positionRows.map(r => r.id));
+    const withScores = Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '' && !positionIds.has(id));
+    if (withScores.length === 0 && positionRows.length === 0) { showToast('No scores entered.', 'error'); return; }
     const invalid = withScores.filter(id => !isValidScore(scores[id]));
     if (invalid.length > 0) { showToast('One or more scores are invalid. Check for negative or non-numeric values.', 'error'); return; }
     setIsSaving(true);
@@ -3250,6 +3271,11 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           return { event_activity_id: activity.id, student_id: sid, result_value: score, recorded_by: user.id, is_new_record: false };
         });
 
+        // Append position-only entries (encoded as 9000 + placing so they rank below all timed runners)
+        positionRows.forEach(({ id, value }) => {
+          rows.push({ event_activity_id: activity.id, student_id: id, result_value: value, recorded_by: user.id, is_new_record: false });
+        });
+
         // FIX: Set the record flag exactly once (removed the duplicate block that was below the upsert)
         // Save results first — only update the record if the save succeeds
         const { error: resultsErr } = await supabase.from('event_results').upsert(rows, { onConflict: 'event_activity_id,student_id' });
@@ -3267,14 +3293,20 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           setCurrentRecord(newRecPayload);
           if (refreshRecords) refreshRecords();
         } else {
-          showToast(`Successfully saved ${rows.length} results!`);
+          const posCount = positionRows.length;
+          const timeCount = withScores.length;
+          showToast(`Saved ${timeCount} time${timeCount !== 1 ? 's' : ''}${posCount > 0 ? ` + ${posCount} position${posCount !== 1 ? 's' : ''}` : ''}.`);
         }
       }
     } catch (err) { console.error(err); showToast(navigator.onLine === false ? 'No connection — scores not saved. Try again when back online.' : 'Failed to save results. Please try again.', 'error'); return; } finally { setIsSaving(false); }
 
     setIsDirty(false);
     setLastSavedTime(new Date());
-    setSavedStudentIds(prev => new Set([...prev, ...Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '')]));
+    setSavedStudentIds(prev => new Set([
+      ...prev,
+      ...Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== ''),
+      ...positionRows.map(r => r.id),
+    ]));
 
     // Advance to next heat automatically
     if (heatSize !== 'All') {
@@ -3400,7 +3432,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
   const isPlacingMode = !isTrial && activity.scoringType === 'placing';
   const isTrack = isTrial ? activity.filters.unit === 'seconds' : activity.type === 'track';
+  const isHybridTrack = !isTrial && isTrack && !isPlacingMode; // track events support optional position fallback per student
   const unitLabel = isPlacingMode ? 'Place' : isTrial ? (activity.filters.unit === 'seconds' ? 'Secs' : activity.filters.unit === 'cm' ? 'cm' : 'Meters') : (isTrack ? 'Secs' : 'Meters');
+  const HYBRID_POSITION_OFFSET = 9000; // values >= this are position-only entries, not times
   const attUnit = activity.unit || (isTrack ? 'seconds' : 'm');
 
   // --- MULTI-ATTEMPT UI ---
@@ -3733,29 +3767,50 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                           </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          {savedStudentIds.has(student.id) && !scores[student.id] && (
+                          {savedStudentIds.has(student.id) && !scores[student.id] && positionOverrides[student.id] === undefined && (
                             <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0"/>
                           )}
-                          {isPlacingMode ? (
-                            <div className="flex gap-1 flex-wrap justify-end max-w-[180px]">
-                              {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => (
-                                <button key={label} onClick={() => handleScoreChange(student.id, idx + 1)}
-                                  className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-colors touch-manipulation ${scores[student.id] == idx + 1 ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                                  {label}
-                                </button>
-                              ))}
-                              {scores[student.id] && <button onClick={() => handleScoreChange(student.id, '')} className="px-1.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 touch-manipulation">✕</button>}
+                          {isPlacingMode || positionOverrides[student.id] !== undefined ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex gap-1 flex-wrap justify-end max-w-[180px]">
+                                {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => {
+                                  const val = idx + 1;
+                                  const isSelected = isPlacingMode ? scores[student.id] == val : positionOverrides[student.id] === val;
+                                  return (
+                                    <button key={label} onClick={() => {
+                                      if (isPlacingMode) { handleScoreChange(student.id, val); }
+                                      else { setPositionOverrides(prev => ({ ...prev, [student.id]: val })); setIsDirty(true); }
+                                    }}
+                                      className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-colors touch-manipulation ${isSelected ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                                {(isPlacingMode ? scores[student.id] : positionOverrides[student.id] !== null) && (
+                                  <button onClick={() => {
+                                    if (isPlacingMode) handleScoreChange(student.id, '');
+                                    else togglePositionMode(student.id);
+                                  }} className="px-1.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 touch-manipulation">✕</button>
+                                )}
+                              </div>
+                              {isHybridTrack && <span className="text-[10px] text-slate-400">position only — no time recorded</span>}
                             </div>
                           ) : (
                             <div className="flex items-center gap-1">
                               <input
                                 id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
-                                value={scores[student.id] || ''} placeholder={isTrack ? '0.00' : '0.00'}
+                                value={scores[student.id] || ''} placeholder="0.00"
                                 onChange={(e) => handleScoreChange(student.id, e.target.value)}
                                 onKeyDown={(e) => handleKeyDown(e, nextId)}
                                 className="w-24 px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                               <span className="text-xs text-slate-400 font-medium">{unitLabel}</span>
+                              {isHybridTrack && (
+                                <button onClick={() => togglePositionMode(student.id)} title="No time — enter position instead"
+                                  className="p-1.5 rounded-lg text-slate-300 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors touch-manipulation" >
+                                  <Hash size={14}/>
+                                </button>
+                              )}
                             </div>
                           )}
                           {!isTrial && (
@@ -3821,21 +3876,34 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
                                 {!isTrial && <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">{student.best_trial_score ?? '--'}</td>}
                                 <td className="px-4 py-3 text-right">
-                                  {isPlacingMode ? (
-                                    <div className="flex gap-1.5 flex-wrap justify-end">
-                                      {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => (
-                                        <button key={label} onClick={() => handleScoreChange(student.id, idx + 1)}
-                                          className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors touch-manipulation ${scores[student.id] == idx + 1 ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
-                                          {label}
-                                        </button>
-                                      ))}
-                                      {scores[student.id] && (
-                                        <button onClick={() => handleScoreChange(student.id, '')} className="px-2 py-2 rounded-lg text-sm text-red-400 hover:bg-red-50 touch-manipulation">✕</button>
-                                      )}
+                                  {isPlacingMode || positionOverrides[student.id] !== undefined ? (
+                                    <div className="flex flex-col items-end gap-1">
+                                      <div className="flex gap-1.5 flex-wrap justify-end">
+                                        {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => {
+                                          const val = idx + 1;
+                                          const isSelected = isPlacingMode ? scores[student.id] == val : positionOverrides[student.id] === val;
+                                          return (
+                                            <button key={label} onClick={() => {
+                                              if (isPlacingMode) { handleScoreChange(student.id, val); }
+                                              else { setPositionOverrides(prev => ({ ...prev, [student.id]: val })); setIsDirty(true); }
+                                            }}
+                                              className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors touch-manipulation ${isSelected ? 'bg-sky-500 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                              {label}
+                                            </button>
+                                          );
+                                        })}
+                                        {(isPlacingMode ? scores[student.id] : positionOverrides[student.id] !== null) && (
+                                          <button onClick={() => {
+                                            if (isPlacingMode) handleScoreChange(student.id, '');
+                                            else togglePositionMode(student.id);
+                                          }} className="px-2 py-2 rounded-lg text-sm text-red-400 hover:bg-red-50 touch-manipulation">✕</button>
+                                        )}
+                                      </div>
+                                      {isHybridTrack && <span className="text-[10px] text-slate-400">position only</span>}
                                     </div>
                                   ) : (
                                     <div className="flex items-center justify-end gap-2">
-                                      {savedStudentIds.has(student.id) && !scores[student.id] && (
+                                      {savedStudentIds.has(student.id) && positionOverrides[student.id] === undefined && (
                                         <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0"/>
                                       )}
                                       <input
@@ -3846,6 +3914,12 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                         className="w-28 px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                       />
                                       <span className="text-xs text-slate-400 font-medium w-8 text-left">{unitLabel}</span>
+                                      {isHybridTrack && (
+                                        <button onClick={() => togglePositionMode(student.id)} title="No time — enter position instead"
+                                          className="p-1.5 rounded-lg text-slate-300 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-colors">
+                                          <Hash size={14}/>
+                                        </button>
+                                      )}
                                     </div>
                                   )}
                                 </td>
@@ -4016,7 +4090,7 @@ const ParentPortal = ({ onNavigate }) => {
           house:          sd.house || 'Unassigned',
           houseColorClass,
           houseColorHex:  getHouseColorHex(houseColorClass),
-          metric:         isPlacing ? null : `${r.result_value}${suffix}`,
+          metric:         isPlacing ? null : (act?.activity_type === 'track' && parseFloat(r.result_value) >= 9000 ? `Pos ${Math.round(parseFloat(r.result_value)) - 9000}` : `${r.result_value}${suffix}`),
           podiumLabel,
           isRecord:       r.is_new_record,
           points:         r.calculated_points || 0,
