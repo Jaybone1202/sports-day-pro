@@ -2686,8 +2686,8 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     <div className="space-y-6">
       <ConfirmModal isOpen={modalConfig.isOpen && modalConfig.type === 'delete-history'} title="Delete Trial Data" message={`Permanently delete all data recorded for "${modalConfig.payload?.name}" in this session?`} onConfirm={confirmDeleteHistory} onCancel={() => setModalConfig({ isOpen: false, type: null, payload: null })}/>
       <header className="mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Staff Data Entry</h1>
-        <p className="text-slate-500 dark:text-slate-400">Welcome, {user.first_name}. Choose a mode to begin recording data.</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hello, {user.first_name}</h1>
+        <p className="text-slate-500 dark:text-slate-400">Select an activity below to start entering results.</p>
         <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-64 mt-4">
           <button onClick={() => setMode('events')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'events' ? 'bg-white dark:bg-slate-600 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Main Events</button>
           <button onClick={() => setMode('trials')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'trials' ? 'bg-white dark:bg-slate-600 text-purple-700 dark:text-purple-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Trials / PE</button>
@@ -2965,6 +2965,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [isDirty, setIsDirty] = useState(false);
   const [pendingHeat, setPendingHeat] = useState(null);
   const [showUnsavedHeatModal, setShowUnsavedHeatModal] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState(null);
+  const [savedStudentIds, setSavedStudentIds] = useState(new Set());
 
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
@@ -3271,6 +3273,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     } catch (err) { console.error(err); showToast(navigator.onLine === false ? 'No connection — scores not saved. Try again when back online.' : 'Failed to save results. Please try again.', 'error'); return; } finally { setIsSaving(false); }
 
     setIsDirty(false);
+    setLastSavedTime(new Date());
+    setSavedStudentIds(prev => new Set([...prev, ...Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '')]));
 
     // Advance to next heat automatically
     if (heatSize !== 'All') {
@@ -3278,6 +3282,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       const nextHeat = activeHeat + 1;
       if (groupedRoster[nextHeat]) {
         setActiveHeat(nextHeat);
+        setScores({});
         setTimerSeconds(timerPreset);
         setTimerRunning(true);
       }
@@ -3647,6 +3652,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           </div>
           <div className="flex flex-col items-end gap-1">
             {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Event locked by organiser</span>}
+            {lastSavedTime && !isDirty && <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 size={11}/> Saved {lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
             <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked}>
               {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> Save{heatSize !== 'All' ? ` Heat ${activeHeat}` : ''}</>}
             </Button>
@@ -3727,6 +3733,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                           </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
+                          {savedStudentIds.has(student.id) && !scores[student.id] && (
+                            <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0"/>
+                          )}
                           {isPlacingMode ? (
                             <div className="flex gap-1 flex-wrap justify-end max-w-[180px]">
                               {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => (
@@ -3738,13 +3747,16 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                               {scores[student.id] && <button onClick={() => handleScoreChange(student.id, '')} className="px-1.5 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 touch-manipulation">✕</button>}
                             </div>
                           ) : (
-                            <input
-                              id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
-                              value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
-                              onChange={(e) => handleScoreChange(student.id, e.target.value)}
-                              onKeyDown={(e) => handleKeyDown(e, nextId)}
-                              className="w-24 px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
+                            <div className="flex items-center gap-1">
+                              <input
+                                id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
+                                value={scores[student.id] || ''} placeholder={isTrack ? '0.00' : '0.00'}
+                                onChange={(e) => handleScoreChange(student.id, e.target.value)}
+                                onKeyDown={(e) => handleKeyDown(e, nextId)}
+                                className="w-24 px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <span className="text-xs text-slate-400 font-medium">{unitLabel}</span>
+                            </div>
                           )}
                           {!isTrial && (
                             <button onClick={() => setModalConfig({ isOpen: true, type: 'kick', payload: student.id })}
@@ -3822,13 +3834,19 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                       )}
                                     </div>
                                   ) : (
-                                    <input
-                                      id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
-                                      value={scores[student.id] || ''} placeholder={isTrack ? '12.45' : '4.50'}
-                                      onChange={(e) => handleScoreChange(student.id, e.target.value)}
-                                      onKeyDown={(e) => handleKeyDown(e, nextId)}
-                                      className="w-full px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                    />
+                                    <div className="flex items-center justify-end gap-2">
+                                      {savedStudentIds.has(student.id) && !scores[student.id] && (
+                                        <CheckCircle2 size={15} className="text-emerald-500 flex-shrink-0"/>
+                                      )}
+                                      <input
+                                        id={`score-input-${student.id}`} type="number" inputMode="decimal" step="0.01"
+                                        value={scores[student.id] || ''} placeholder="0.00"
+                                        onChange={(e) => handleScoreChange(student.id, e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(e, nextId)}
+                                        className="w-28 px-3 py-3 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-sky-400 outline-none text-right font-mono text-base bg-slate-50 dark:bg-slate-700 dark:text-white focus:bg-white dark:focus:bg-slate-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      />
+                                      <span className="text-xs text-slate-400 font-medium w-8 text-left">{unitLabel}</span>
+                                    </div>
                                   )}
                                 </td>
                                 {!isTrial && (
@@ -3892,21 +3910,32 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         </div>
       )}
 
-      {/* Sticky mobile save bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between z-30 shadow-xl md:hidden">
-        <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-          {heatSize !== 'All'
-            ? <span>{savedHeats.size}/{heatKeys.length} heats done · Heat {activeHeat}</span>
-            : <span>{Object.values(scores).filter(v => v !== '' && v != null).length} / {studentRoster.length} scored</span>}
+      {/* All-done banner */}
+      {heatSize !== 'All' && savedHeats.size === heatKeys.length && heatKeys.length > 0 && (
+        <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl">
+          <CheckCircle2 size={22} className="text-emerald-600 dark:text-emerald-400 flex-shrink-0"/>
+          <div>
+            <p className="font-bold text-emerald-800 dark:text-emerald-200">All heats saved</p>
+            <p className="text-sm text-emerald-700 dark:text-emerald-300">Results for all {heatKeys.length} heats have been recorded. You're done here.</p>
+          </div>
         </div>
-        <div className="flex flex-col items-end gap-1">
-          {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Locked by organiser</span>}
-          <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked} className="!py-2.5 !px-5">
-            {isSaving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>}
-            {isSaving ? 'Saving...' : heatSize !== 'All' ? `Save Heat ${activeHeat}` : 'Save All'}
-          </Button>
+      )}
+
+      {/* Sticky mobile save bar — only shown when there are unsaved changes */}
+      {isDirty && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t-2 border-sky-400 dark:border-sky-600 px-4 py-3 flex items-center justify-between z-30 shadow-2xl md:hidden">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            <p className="font-bold text-sky-700 dark:text-sky-300">{Object.values(scores).filter(v => v !== '' && v != null).length} score{Object.values(scores).filter(v => v !== '' && v != null).length !== 1 ? 's' : ''} unsaved</p>
+            {lastSavedTime && <p className="text-xs text-slate-400">Last saved {lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>}
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Locked by organiser</span>}
+            <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked} className="!py-2.5 !px-5">
+              {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> {heatSize !== 'All' ? `Save Heat ${activeHeat}` : 'Save All'}</>}
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
       {/* Bottom padding so sticky bar doesn't overlap content on mobile */}
       <div className="h-20 md:hidden"/>
     </div>
