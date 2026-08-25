@@ -2973,6 +2973,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
   // Per-student position override for track activities where a time isn't available
   const [positionOverrides, setPositionOverrides] = useState({});
+  // Heats set to full position mode (no times for anyone in that heat)
+  const [positionHeats, setPositionHeats] = useState(new Set());
+
   const togglePositionMode = (studentId) => {
     setPositionOverrides(prev => {
       const next = { ...prev };
@@ -2981,6 +2984,37 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       return next;
     });
     setScores(prev => { const next = { ...prev }; delete next[studentId]; return next; });
+    setIsDirty(true);
+  };
+
+  const toggleHeatPositionMode = (heatNum) => {
+    const studentsInHeat = (groupedRoster[heatNum] || []);
+    setPositionHeats(prev => {
+      const next = new Set(prev);
+      if (next.has(heatNum)) {
+        next.delete(heatNum);
+        // Clear position overrides for students in this heat
+        setPositionOverrides(po => {
+          const updated = { ...po };
+          studentsInHeat.forEach(s => { delete updated[s.id]; });
+          return updated;
+        });
+      } else {
+        next.add(heatNum);
+        // Set all students in this heat to position mode (no position selected yet)
+        setPositionOverrides(po => {
+          const updated = { ...po };
+          studentsInHeat.forEach(s => { if (updated[s.id] === undefined) updated[s.id] = null; });
+          return updated;
+        });
+        setScores(prev => {
+          const next = { ...prev };
+          studentsInHeat.forEach(s => { delete next[s.id]; });
+          return next;
+        });
+      }
+      return next;
+    });
     setIsDirty(true);
   };
 
@@ -3715,6 +3749,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           </div>
           <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { if (isDirty) { setPendingHeat(next); setShowUnsavedHeatModal(true); } else { setActiveHeat(next); setScores({}); } } }} disabled={!groupedRoster[activeHeat + 1]}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronRight size={20}/></button>
+
+          {/* Position-mode toggle for whole heat (only for hybrid track activities) */}
+          {isHybridTrack && (
+            <button
+              onClick={() => toggleHeatPositionMode(activeHeat)}
+              title={positionHeats.has(activeHeat) ? 'Switch back to time entry for this heat' : 'Use positions for this entire heat (no times)'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${positionHeats.has(activeHeat) ? 'bg-sky-500 text-white border-sky-500' : 'border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-sky-400 hover:text-sky-600 dark:hover:text-sky-400'}`}>
+              <Hash size={13}/>
+              {positionHeats.has(activeHeat) ? 'Pos mode' : 'Use positions'}
+            </button>
+          )}
 
           {/* Countdown timer */}
           <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-3">
