@@ -4297,12 +4297,21 @@ const ParentPortal = ({ onNavigate }) => {
     e.preventDefault(); setIsLoading(true); setErrorMsg('');
     try {
       const { data: rows, error } = await supabase.rpc('get_parent_portal_event', { p_access_code: accessCode.toUpperCase() });
-      if (error || !rows || rows.length === 0) throw new Error('Invalid code or event is not active.');
-      const row = rows[0];
+      if (error) throw new Error(error.message);
+      // RPC returns either a single JSON object or an array with one element
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (!row || (!row.id && !row.event_id)) throw new Error('Invalid code or event is not active.');
       // Set session config so RLS policies can scope anon queries to this event only
       await supabase.rpc('set_config', { setting: 'app.parent_access_code', value: accessCode.toUpperCase(), is_local: true });
-      // Reconstruct the event shape the rest of the portal expects
-      const eventObj = { id: row.event_id, name: row.event_name, event_date: row.event_date, school_id: row.school_id, is_active: true, parent_access_code: accessCode.toUpperCase() };
+      // Reconstruct the event shape — RPC returns either {id, name, ...} or {event_id, event_name, ...}
+      const eventObj = {
+        id:                row.event_id  || row.id,
+        name:              row.event_name || row.name,
+        event_date:        row.event_date,
+        school_id:         row.school_id,
+        is_active:         true,
+        parent_access_code: accessCode.toUpperCase(),
+      };
       const [{ data: hcData }, { data: schoolData }] = await Promise.all([
         supabase.from('school_houses').select('*').eq('school_id', row.school_id),
         supabase.from('schools').select('records_public').eq('id', row.school_id).maybeSingle(),
