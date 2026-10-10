@@ -50,6 +50,7 @@ import {
   Unlock,
   FlagOff,
   Hash,
+  Download,
 } from 'lucide-react';
 
 // ==========================================
@@ -900,8 +901,8 @@ const HouseSetupModule = ({ onBack, user, showToast }) => {
 // 6. EVENT SETUP MODULE
 // ==========================================
 
-const PlanningModule = ({ user, showToast }) => {
-  const [tab, setTab] = useState('events');
+const PlanningModule = ({ user, showToast, defaultTab = 'events' }) => {
+  const [tab, setTab] = useState(defaultTab);
   return (
     <div className="space-y-6">
       <div className="border-b border-slate-200 dark:border-slate-700">
@@ -2205,6 +2206,28 @@ const LiveStandingsModule = ({ user }) => {
           <button onClick={() => setProjector(true)} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:text-sky-600 hover:border-sky-300 transition-colors">
             <Radio size={16}/> Projector
           </button>
+          <button onClick={() => {
+            if (recentResults.length === 0) return;
+            const header = ['Activity','Age Group','Gender','First Name','Last Name','House','Result','Points','Record'];
+            const rows = recentResults.map(r => {
+              const parts = r.event.split(' ');
+              const ageGroup = parts[0] || '';
+              const gender   = parts[1] || '';
+              const actName  = parts.slice(2).join(' ');
+              const [first, ...rest] = r.winner.split(' ');
+              return [actName, ageGroup, gender, first, rest.join(' '), r.house, r.metric, r.points, r.isRecord ? 'Yes' : ''];
+            });
+            const csv = [header, ...rows].map(row => row.map(v => `"${String(v ?? '').replace(/"/g,'""')}"`).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement('a');
+            a.href     = url;
+            a.download = `${(eventName || 'results').replace(/[^a-z0-9]/gi,'_')}_results.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 hover:border-emerald-300 transition-colors">
+            <Download size={16}/> Export CSV
+          </button>
           <Button onClick={() => window.print()} variant="secondary"><Printer size={18}/> Print Report</Button>
         </div>
       </div>
@@ -2396,7 +2419,8 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   }, [user, currentView]);
 
   if (currentView === 'import')    return <PageTransition keyProp="import"><DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
-  if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast} defaultTab="events"/></PageTransition>;
+  if (currentView === 'trials')    return <PageTransition keyProp="trials"><PlanningModule user={user} showToast={showToast} defaultTab="trials"/></PageTransition>;
   if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user}/></PageTransition>;
   if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
@@ -3117,8 +3141,34 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         if (existing && existing.length > 0) {
           const loaded = {};
           existing.forEach(r => { loaded[r.student_id] = r.result_value; });
-          if (!isRefresh) setScores(loaded);
-          else setScores(prev => ({ ...loaded, ...prev }));
+          if (!isRefresh) {
+            // Check for a localStorage backup with unsaved scores (backup overrides DB for unsaved entries)
+            try {
+              const raw = localStorage.getItem(`sdp-score-backup-${activity.id}`);
+              if (raw) {
+                const { scores: backup } = JSON.parse(raw);
+                const hasUnsaved = Object.keys(backup).some(k => backup[k] && String(backup[k]).trim() !== '' && !loaded[k]);
+                if (hasUnsaved) {
+                  setScores({ ...loaded, ...backup });
+                  setIsDirty(true);
+                  showToast('Restored unsaved scores from local backup', 'warning');
+                } else { setScores(loaded); }
+              } else { setScores(loaded); }
+            } catch (e) { setScores(loaded); }
+          } else setScores(prev => ({ ...loaded, ...prev }));
+        } else if (!isRefresh) {
+          // No DB scores yet — still check for a backup from a previous session
+          try {
+            const raw = localStorage.getItem(`sdp-score-backup-${activity.id}`);
+            if (raw) {
+              const { scores: backup } = JSON.parse(raw);
+              if (Object.keys(backup).some(k => backup[k] && String(backup[k]).trim() !== '')) {
+                setScores(backup);
+                setIsDirty(true);
+                showToast('Restored unsaved scores from local backup', 'warning');
+              }
+            }
+          } catch (e) {}
         }
         if (activity.attemptsEnabled) {
           const { data: attData } = await supabase.from('activity_attempts').select('*').eq('activity_id', activity.id);
@@ -3214,6 +3264,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const orderedStudents = heatKeys.flatMap(h => groupedRoster[h]);
 
   const handleScoreChange = (id, val) => { setScores(prev => ({ ...prev, [id]: val })); setIsDirty(true); };
+
+  // Auto-backup scores to localStorage so a browser crash / network drop doesn't lose unsaved work
+  useEffect(() => {
+    if (!isDirty || !activity?.id || Object.keys(scores).length === 0) return;
+    try {
+      localStorage.setItem(`sdp-score-backup-${activity.id}`, JSON.stringify({ scores, savedAt: Date.now() }));
+    } catch (e) {}
+  }, [scores, isDirty, activity?.id]);
 
   const handleKeyDown = (e, nextId) => {
     if (e.key !== 'Enter') return;
@@ -3334,6 +3392,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       }
     } catch (err) { console.error(err); showToast(navigator.onLine === false ? 'No connection — scores not saved. Try again when back online.' : 'Failed to save results. Please try again.', 'error'); return; } finally { setIsSaving(false); }
 
+    try { localStorage.removeItem(`sdp-score-backup-${activity.id}`); } catch (e) {}
     setIsDirty(false);
     setLastSavedTime(new Date());
     setSavedStudentIds(prev => new Set([
@@ -5151,7 +5210,8 @@ const LoginView = ({ onLogin, onNavigate }) => {
 // Shared nav item list to avoid duplication between desktop sidebar and mobile drawer
 const ORGANISER_NAV = [
   { view: 'dashboard',   icon: Activity,      label: 'Dashboard'      },
-  { view: 'planning', icon: ClipboardList, label: 'Planning' },
+  { view: 'planning',    icon: Settings,      label: 'Planning'       },
+  { view: 'trials',      icon: ClipboardList, label: 'Trials'         },
   { view: 'students',    icon: Users,         label: 'Directory'      },
   { view: 'houses',      icon: Palette,       label: 'Houses'         },
   { view: 'standings',   icon: Trophy,        label: 'Live Standings' },
@@ -5162,7 +5222,8 @@ const ORGANISER_NAV = [
 // Hash routing — maps URL hash ↔ app route/view
 const VIEW_TO_HASH = {
   'dashboard':   '#/organiser',
-  'planning': '#/organiser/planning',
+  'planning':    '#/organiser/planning',
+  'trials':      '#/organiser/trials',
   'students':    '#/organiser/directory',
   'houses':      '#/organiser/houses',
   'standings':   '#/organiser/standings',
@@ -5170,13 +5231,14 @@ const VIEW_TO_HASH = {
   'flags':       '#/organiser/flags',
 };
 const HASH_TO_NAV = {
-  '#/organiser':           { route: 'organiser-dashboard', view: 'dashboard'   },
-  '#/organiser/planning':  { route: 'organiser-dashboard', view: 'planning' },
-  '#/organiser/directory': { route: 'organiser-dashboard', view: 'students'    },
-  '#/organiser/houses':    { route: 'organiser-dashboard', view: 'houses'      },
-  '#/organiser/standings': { route: 'organiser-dashboard', view: 'standings'   },
-  '#/organiser/records':   { route: 'organiser-dashboard', view: 'records'     },
-  '#/organiser/flags':     { route: 'organiser-dashboard', view: 'flags'       },
+  '#/organiser':           { route: 'organiser-dashboard', view: 'dashboard' },
+  '#/organiser/planning':  { route: 'organiser-dashboard', view: 'planning'  },
+  '#/organiser/trials':    { route: 'organiser-dashboard', view: 'trials'    },
+  '#/organiser/directory': { route: 'organiser-dashboard', view: 'students'  },
+  '#/organiser/houses':    { route: 'organiser-dashboard', view: 'houses'    },
+  '#/organiser/standings': { route: 'organiser-dashboard', view: 'standings' },
+  '#/organiser/records':   { route: 'organiser-dashboard', view: 'records'   },
+  '#/organiser/flags':     { route: 'organiser-dashboard', view: 'flags'     },
   '#/staff':               { route: 'staff-dashboard',     view: null           },
   '#/admin':               { route: 'super-admin',         view: null           },
   '#/parent':              { route: 'parent',              view: null           },
