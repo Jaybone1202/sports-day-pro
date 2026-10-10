@@ -10,6 +10,8 @@
 -- returns matching students from that school only.
 -- Returns id, first_name, last_name, class, age_group, gender, house.
 
+DROP FUNCTION IF EXISTS search_students_for_parent(text, text);
+
 CREATE OR REPLACE FUNCTION search_students_for_parent(
   p_access_code text,
   p_search      text

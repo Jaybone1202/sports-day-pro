@@ -5276,6 +5276,7 @@ const LoginView = ({ onLogin, onNavigate }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [legalModal, setLegalModal] = useState(null); // 'privacy' | 'terms' | null
 
   const handleSubmit = async (e) => {
     e.preventDefault(); setLoading(true); setErrorMsg('');
@@ -5332,8 +5333,70 @@ const LoginView = ({ onLogin, onNavigate }) => {
               <Plus size={16}/> Register School
             </button>
           </div>
+          <p className="text-center text-xs text-slate-400 pt-2">
+            By using SportsDay Pro you agree to our{' '}
+            <button onClick={() => setLegalModal('terms')} className="underline hover:text-slate-600 transition-colors">Terms of Service</button>
+            {' '}and{' '}
+            <button onClick={() => setLegalModal('privacy')} className="underline hover:text-slate-600 transition-colors">Privacy Policy</button>
+          </p>
         </div>
       </div>
+
+      {/* Legal modals */}
+      {legalModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={() => setLegalModal(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <h2 className="font-bold text-slate-900 text-lg">{legalModal === 'privacy' ? 'Privacy Policy' : 'Terms of Service'}</h2>
+              <button onClick={() => setLegalModal(null)} className="text-slate-400 hover:text-slate-700 transition-colors"><X size={20}/></button>
+            </div>
+            <div className="overflow-y-auto p-5 text-sm text-slate-600 space-y-4 leading-relaxed">
+              {legalModal === 'privacy' ? (
+                <>
+                  <p className="text-xs text-slate-400">Last updated: October 2026</p>
+                  <h3 className="font-semibold text-slate-800">1. Who we are</h3>
+                  <p>SportsDay Pro is a school sports day management platform operated in South Africa. We are committed to protecting personal information in accordance with the Protection of Personal Information Act, 2013 (POPIA).</p>
+                  <h3 className="font-semibold text-slate-800">2. What information we collect</h3>
+                  <p>We collect and process the following personal information:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><strong>School staff:</strong> name, email address, role</li>
+                    <li><strong>Students:</strong> first name, last name, class, age group, gender, house</li>
+                    <li><strong>Event data:</strong> scores, results, and records linked to student identifiers</li>
+                  </ul>
+                  <h3 className="font-semibold text-slate-800">3. Purpose of processing</h3>
+                  <p>Personal information is collected solely to facilitate the running of school sports day events — including scoring, results, and parent-facing live standings. We do not use student data for marketing or share it with third parties.</p>
+                  <h3 className="font-semibold text-slate-800">4. Data storage and security</h3>
+                  <p>All data is stored securely on Supabase infrastructure with row-level security policies. Access is restricted by school and role. Student data is visible only to authorised staff at the same school.</p>
+                  <h3 className="font-semibold text-slate-800">5. Retention and deletion</h3>
+                  <p>Schools may delete student records at any time via the Directory. Individual student removal satisfies POPIA right-to-erasure requests. Event results linked to deleted students are anonymised (the student identifier is removed).</p>
+                  <h3 className="font-semibold text-slate-800">6. Your rights under POPIA</h3>
+                  <p>You have the right to access, correct, or request deletion of personal information we hold. Contact your school organiser or reach us at the address on your school's subscription to exercise these rights.</p>
+                  <h3 className="font-semibold text-slate-800">7. Responsible party</h3>
+                  <p>The responsible party for POPIA purposes is the subscribing school. SportsDay Pro acts as an operator processing data on the school's behalf.</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-400">Last updated: October 2026</p>
+                  <h3 className="font-semibold text-slate-800">1. Acceptance</h3>
+                  <p>By registering a school or using SportsDay Pro, you agree to these Terms of Service. If you do not agree, do not use the platform.</p>
+                  <h3 className="font-semibold text-slate-800">2. Use of the platform</h3>
+                  <p>SportsDay Pro is licensed for use by schools to manage sports day events. You may not use the platform for any unlawful purpose or share access credentials with parties outside your school.</p>
+                  <h3 className="font-semibold text-slate-800">3. School responsibility</h3>
+                  <p>The school organiser is responsible for ensuring that student data uploaded to the platform is accurate and that consent has been obtained where required by POPIA. SportsDay Pro is not liable for data uploaded by schools.</p>
+                  <h3 className="font-semibold text-slate-800">4. Acceptable use</h3>
+                  <p>You agree not to attempt to access data belonging to other schools, reverse engineer the platform, or use automated tools to extract data.</p>
+                  <h3 className="font-semibold text-slate-800">5. Availability</h3>
+                  <p>We aim for high availability but do not guarantee uninterrupted access. We are not liable for losses arising from downtime, especially during live events.</p>
+                  <h3 className="font-semibold text-slate-800">6. Termination</h3>
+                  <p>We reserve the right to suspend or terminate access for schools that violate these terms. Schools may cancel their subscription at any time; data will be retained for 30 days after cancellation then permanently deleted.</p>
+                  <h3 className="font-semibold text-slate-800">7. Governing law</h3>
+                  <p>These terms are governed by the laws of the Republic of South Africa.</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
