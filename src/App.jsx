@@ -2872,11 +2872,13 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
 
               {/* Start a new activity */}
               <Card>
-                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Plus size={16} className="text-purple-500"/> New Activity</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Plus size={16} className="text-purple-500"/> New Entry Session</h3>
+
+                {/* Row 1: Activity name + measurement */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                   <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Activity Name <span className="text-red-400">*</span></label>
-                    <input type="text" placeholder="e.g. 100m Sprint, High Jump, Discus..."
+                    <input type="text" placeholder="e.g. 100m Sprint, High Jump, Discus…"
                       value={trialFilters.customActivityName} onChange={(e) => setTrialFilters({...trialFilters, customActivityName: e.target.value})}
                       className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-purple-400 bg-white dark:bg-slate-700 dark:text-white text-sm"/>
                   </div>
@@ -2891,39 +2893,40 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   </div>
                 </div>
 
-                {/* Optional filters — collapsed by default */}
-                <details className="group mb-4">
-                  <summary className="cursor-pointer text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1.5 select-none list-none">
-                    <ChevronRight size={13} className="group-open:rotate-90 transition-transform"/> Optional filters (age group, class, house, gender)
-                  </summary>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 mb-1">Age Group</label>
-                      <select value={trialFilters.ageGroup} onChange={(e) => setTrialFilters({...trialFilters, ageGroup: e.target.value})}
-                        className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
-                        <option value="All">All Ages</option>
-                        {['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].map(a => <option key={a} value={a}>{a}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 mb-1">Gender</label>
-                      <select value={trialFilters.gender} onChange={(e) => setTrialFilters({...trialFilters, gender: e.target.value})}
-                        className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
-                        <option value="All">All</option><option value="Boys">Boys</option><option value="Girls">Girls</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 mb-1">Class</label>
-                      <input type="text" placeholder="8A, 8B" value={trialFilters.className} onChange={(e) => setTrialFilters({...trialFilters, className: e.target.value})}
-                        className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-400 bg-white dark:bg-slate-700 dark:text-white text-sm"/>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-500 mb-1">House</label>
-                      <input type="text" placeholder="Disa, Red…" value={trialFilters.house === 'All' ? '' : trialFilters.house} onChange={(e) => setTrialFilters({...trialFilters, house: e.target.value || 'All'})}
-                        className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-400 bg-white dark:bg-slate-700 dark:text-white text-sm"/>
-                    </div>
+                {/* Row 2: Who are we scoring — always visible */}
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Filter roster to</p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Age Group</label>
+                    <select value={trialFilters.ageGroup} onChange={(e) => setTrialFilters({...trialFilters, ageGroup: e.target.value})}
+                      className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
+                      <option value="All">All ages</option>
+                      {['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
                   </div>
-                </details>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Gender</label>
+                    <select value={trialFilters.gender} onChange={(e) => setTrialFilters({...trialFilters, gender: e.target.value})}
+                      className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
+                      <option value="All">All</option>
+                      <option value="Boys">Boys</option>
+                      <option value="Girls">Girls</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">House</label>
+                    <select value={trialFilters.house} onChange={(e) => setTrialFilters({...trialFilters, house: e.target.value})}
+                      className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
+                      <option value="All">All houses</option>
+                      {Object.keys(houseColors).sort().map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Class <span className="text-slate-400 font-normal">(optional)</span></label>
+                    <input type="text" placeholder="8A, 8B…" value={trialFilters.className} onChange={(e) => setTrialFilters({...trialFilters, className: e.target.value})}
+                      className="w-full px-2 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-400 bg-white dark:bg-slate-700 dark:text-white text-sm"/>
+                  </div>
+                </div>
 
                 <Button onClick={handleStartTrial} variant="primary" className="w-full sm:w-auto" disabled={!trialFilters.customActivityName.trim()}>
                   <Activity size={16}/> Load Roster &amp; Start Scoring
