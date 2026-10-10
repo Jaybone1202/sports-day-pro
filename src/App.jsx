@@ -579,8 +579,8 @@ const Toast = ({ toast }) => {
   if (!toast) return null;
   return (
     <div className="fixed bottom-6 right-6 z-50 hide-on-print">
-      <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl text-white font-semibold text-sm ${toast.type === 'error' ? 'bg-red-600' : 'bg-sky-600'}`}>
-        {toast.type === 'error' ? <AlertCircle size={18}/> : <CheckCircle2 size={18}/>}
+      <div className={`flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl text-white font-semibold text-sm ${toast.type === 'error' ? 'bg-red-600' : toast.type === 'warning' ? 'bg-amber-500' : 'bg-sky-600'}`}>
+        {toast.type === 'error' ? <AlertCircle size={18}/> : toast.type === 'warning' ? <AlertCircle size={18}/> : <CheckCircle2 size={18}/>}
         {toast.msg}
       </div>
     </div>
@@ -1731,7 +1731,14 @@ const TrialSetupModule = ({ onBack, user, showToast, embedded }) => {
         if (error) throw error;
       }
       showToast('Trial setup saved!');
-      if (!embedded && onBack) onBack();
+      if (!embedded && onBack) {
+        onBack();
+      } else {
+        // Re-fetch so the dropdown reflects the newly created/updated trial
+        const { data } = await supabase.from('trials').select('*').eq('school_id', user.school_id).order('trial_date', { ascending: false });
+        setTrials(data || []);
+        if (selectedTrialId === 'new') { setTrialName(''); setTrialDate(''); }
+      }
     } catch (e) { showToast('Failed to save trial.', 'error'); } finally { setIsSaving(false); }
   };
 
@@ -2449,7 +2456,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast} defaultTab="events"/></PageTransition>;
   if (currentView === 'trials')    return <PageTransition keyProp="trials"><OrganiserTrialsModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast}/></PageTransition>;
-  if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user}/></PageTransition>;
+  if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'records')   return <PageTransition keyProp="records"><RecordBoardModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'flags')     return <PageTransition keyProp="flags"><FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/></PageTransition>;
@@ -2563,6 +2570,7 @@ const StaffDashboard = ({ user, showToast, defaultMode }) => {
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [houseColors, setHouseColors]           = useState({});
   const [schoolRecords, setSchoolRecords]       = useState([]);
+  const [returnCount, setReturnCount]           = useState(0);
 
   const fetchGlobals = useCallback(async () => {
     try {
@@ -2588,7 +2596,7 @@ const StaffDashboard = ({ user, showToast, defaultMode }) => {
         activity={selectedActivity}
         houseColors={houseColors}
         schoolRecords={schoolRecords}
-        onClose={() => { setSelectedActivity(null); }}
+        onClose={() => { setSelectedActivity(null); setReturnCount(c => c + 1); }}
         refreshRecords={fetchGlobals}
       />
     );
@@ -2602,12 +2610,13 @@ const StaffDashboard = ({ user, showToast, defaultMode }) => {
       schoolRecords={schoolRecords}
       onSelectActivity={(act) => setSelectedActivity(act)}
       defaultMode={defaultMode}
+      returnCount={returnCount}
     />
   );
 };
 
 // --- STAFF DASHBOARD: MENU ---
-const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSelectActivity, defaultMode }) => {
+const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSelectActivity, defaultMode, returnCount }) => {
   const [mode, setMode]                         = useState(defaultMode || 'events');
   const trialsLocked = defaultMode === 'trials';
   const [allEvents, setAllEvents]               = useState([]);
@@ -2671,6 +2680,12 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     };
     fetchActivities();
   }, [selectedEventId, mode, refreshResultCounts]);
+
+  // Refresh result counts when returning from scoring view
+  useEffect(() => {
+    if (!returnCount || assignedActivities.length === 0) return;
+    refreshResultCounts(assignedActivities);
+  }, [returnCount]);
 
   useEffect(() => {
     if (!selectedEventId) return;
@@ -3237,6 +3252,11 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   // Reset to heat 1 whenever heat size changes
   useEffect(() => { setActiveHeat(1); setSavedHeats(new Set()); setIsDirty(false); }, [heatSize]);
 
+  const changeHeatSize = (newSize) => {
+    if (isDirty && !window.confirm('You have unsaved scores. Changing heat size will clear them. Continue?')) return;
+    setHeatSize(newSize);
+  };
+
   // Countdown timer
   useEffect(() => {
     if (!timerRunning || timerSeconds <= 0) { if (timerSeconds <= 0) setTimerRunning(false); return; }
@@ -3787,7 +3807,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           {/* Heat toggle */}
           <div className={`flex items-center gap-1 rounded-xl border transition-colors ${heatsEnabled ? 'bg-sky-50 dark:bg-sky-900/30 border-sky-200 dark:border-sky-700' : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600'}`}>
             <button
-              onClick={() => setHeatSize(heatsEnabled ? 'All' : '4')}
+              onClick={() => changeHeatSize(heatsEnabled ? 'All' : '4')}
               className={`flex items-center gap-1.5 px-3 py-2 rounded-l-xl text-sm font-semibold transition-colors ${heatsEnabled ? 'text-sky-700 dark:text-sky-300' : 'text-slate-500 dark:text-slate-400'}`}
               title={heatsEnabled ? 'Disable heats' : 'Split into heats'}
             >
@@ -3799,7 +3819,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             {heatsEnabled && (
               <div className="flex items-center border-l border-sky-200 dark:border-sky-700 px-2">
                 {['4','6','8','10','12'].map(n => (
-                  <button key={n} onClick={() => setHeatSize(n)}
+                  <button key={n} onClick={() => changeHeatSize(n)}
                     className={`w-7 h-7 rounded-lg text-xs font-bold transition-colors ${heatSize === n ? 'bg-sky-500 text-white' : 'text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-800'}`}>
                     {n}
                   </button>
@@ -4176,7 +4196,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
 
       {/* Sticky mobile save bar — only shown when there are unsaved changes */}
       {isDirty && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t-2 border-sky-400 dark:border-sky-600 px-4 py-3 flex items-center justify-between z-30 shadow-2xl md:hidden">
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t-2 border-sky-400 dark:border-sky-600 px-4 py-3 flex items-center justify-between z-30 shadow-2xl">
           <div className="text-sm text-slate-600 dark:text-slate-300">
             <p className="font-bold text-sky-700 dark:text-sky-300">{Object.values(scores).filter(v => v !== '' && v != null).length} score{Object.values(scores).filter(v => v !== '' && v != null).length !== 1 ? 's' : ''} unsaved</p>
             {lastSavedTime && <p className="text-xs text-slate-400">Last saved {lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>}
