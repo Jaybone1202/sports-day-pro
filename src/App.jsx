@@ -2389,6 +2389,18 @@ const LiveStandingsModule = ({ user }) => {
 
 // ==========================================
 // 10. ORGANISER PORTAL DASHBOARD
+// Organiser trial data-entry view — same scoring UI as staff, locked to trials mode
+const OrganiserTrialsModule = ({ user, showToast }) => (
+  <div className="space-y-6">
+    <div className="border-b border-slate-200 dark:border-slate-700 pb-4">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Trials</h1>
+      <p className="text-slate-500 dark:text-slate-400 text-sm">Enter and review trial data for your students. To create or manage trial sessions, go to Planning.</p>
+    </div>
+    <StaffDashboard user={user} showToast={showToast} defaultMode="trials"/>
+  </div>
+);
+
+// ==========================================
 // FIX: Passes showToast to StudentDirectoryModule
 // ==========================================
 
@@ -2420,7 +2432,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
 
   if (currentView === 'import')    return <PageTransition keyProp="import"><DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast} defaultTab="events"/></PageTransition>;
-  if (currentView === 'trials')    return <PageTransition keyProp="trials"><PlanningModule user={user} showToast={showToast} defaultTab="trials"/></PageTransition>;
+  if (currentView === 'trials')    return <PageTransition keyProp="trials"><OrganiserTrialsModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user}/></PageTransition>;
   if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
@@ -2532,7 +2544,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
 //      so only one component is mounted at a time.
 // ==========================================
 
-const StaffDashboard = ({ user, showToast }) => {
+const StaffDashboard = ({ user, showToast, defaultMode }) => {
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [houseColors, setHouseColors]           = useState({});
   const [schoolRecords, setSchoolRecords]       = useState([]);
@@ -2574,13 +2586,15 @@ const StaffDashboard = ({ user, showToast }) => {
       houseColors={houseColors}
       schoolRecords={schoolRecords}
       onSelectActivity={(act) => setSelectedActivity(act)}
+      defaultMode={defaultMode}
     />
   );
 };
 
 // --- STAFF DASHBOARD: MENU ---
-const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSelectActivity }) => {
-  const [mode, setMode]                         = useState('events');
+const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSelectActivity, defaultMode }) => {
+  const [mode, setMode]                         = useState(defaultMode || 'events');
+  const trialsLocked = defaultMode === 'trials';
   const [allEvents, setAllEvents]               = useState([]);
   const [assignedActivities, setAssignedActivities] = useState([]);
   const [selectedEventId, setSelectedEventId]   = useState(() => localStorage.getItem('sdp-staff-event') || '');
@@ -2631,7 +2645,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
         if (error) throw error;
         let visible = data || [];
         const eventMeta = allEvents.find(e => e.id === selectedEventId);
-        if (eventMeta && !eventMeta.staff_see_all) {
+        if (eventMeta && !eventMeta.staff_see_all && user.role !== 'organiser') {
           const { data: assignData } = await supabase.from('activity_assignments').select('event_activity_id').eq('staff_id', user.id);
           const assignedIds = new Set((assignData || []).map(a => a.event_activity_id));
           visible = visible.filter(a => assignedIds.has(a.id));
@@ -2715,10 +2729,12 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       <header className="mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hello, {user.first_name}</h1>
         <p className="text-slate-500 dark:text-slate-400">Select an activity below to start entering results.</p>
-        <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-64 mt-4">
-          <button onClick={() => setMode('events')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'events' ? 'bg-white dark:bg-slate-600 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Main Events</button>
-          <button onClick={() => setMode('trials')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'trials' ? 'bg-white dark:bg-slate-600 text-purple-700 dark:text-purple-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Trials / PE</button>
-        </div>
+        {!trialsLocked && (
+          <div className="flex bg-slate-200 dark:bg-slate-700 p-1 rounded-lg w-full sm:w-64 mt-4">
+            <button onClick={() => setMode('events')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'events' ? 'bg-white dark:bg-slate-600 text-blue-700 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Main Events</button>
+            <button onClick={() => setMode('trials')} className={`flex-1 py-1.5 text-sm font-semibold rounded-md transition-colors ${mode === 'trials' ? 'bg-white dark:bg-slate-600 text-purple-700 dark:text-purple-400 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}>Trials / PE</button>
+          </div>
+        )}
       </header>
 
       {mode === 'events' && (
