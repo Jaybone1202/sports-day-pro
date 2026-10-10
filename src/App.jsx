@@ -1930,7 +1930,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
     // Null out recorded_by references so the FK constraint doesn't block the delete
     await supabase.from('event_results').update({ recorded_by: null }).eq('recorded_by', staffId);
     const { error } = await supabase.from('users').delete().eq('id', staffId).eq('school_id', user.school_id);
-    if (error) { console.error('Remove staff error:', error); showToast('Failed to remove staff member', 'error'); return; }
+    if (error) { showToast('Failed to remove staff member', 'error'); return; }
     showToast(`${name} removed`);
     fetchStaff();
   };
@@ -1983,7 +1983,8 @@ const StudentDirectoryModule = ({ user, showToast }) => {
               {/* Mobile card list */}
               <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
                 {filteredAndSorted.map(student => (
-                  <div key={student.id} className="flex items-center gap-3 px-4 py-3">
+                  <div key={student.id} className={`flex items-center gap-3 px-4 py-3 ${selectedStudentIds.has(student.id) ? 'bg-sky-50/60 dark:bg-sky-900/10' : ''}`}>
+                    <input type="checkbox" checked={selectedStudentIds.has(student.id)} onChange={() => toggleSelectStudent(student.id)} className="rounded border-slate-300 text-sky-500 focus:ring-sky-400 cursor-pointer flex-shrink-0"/>
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-0.5 ${getHouseColor(student.house, houseColors)}`}/>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900 dark:text-white text-sm">{student.last_name}, {student.first_name}</p>
