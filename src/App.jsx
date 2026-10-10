@@ -4299,6 +4299,8 @@ const ParentPortal = ({ onNavigate }) => {
       const { data: rows, error } = await supabase.rpc('get_parent_portal_event', { p_access_code: accessCode.toUpperCase() });
       if (error || !rows || rows.length === 0) throw new Error('Invalid code or event is not active.');
       const row = rows[0];
+      // Set session config so RLS policies can scope anon queries to this event only
+      await supabase.rpc('set_config', { setting: 'app.parent_access_code', value: accessCode.toUpperCase(), is_local: true });
       // Reconstruct the event shape the rest of the portal expects
       const eventObj = { id: row.event_id, name: row.event_name, event_date: row.event_date, school_id: row.school_id, is_active: true, parent_access_code: accessCode.toUpperCase() };
       const [{ data: hcData }, { data: schoolData }] = await Promise.all([
@@ -4315,6 +4317,7 @@ const ParentPortal = ({ onNavigate }) => {
 
   const fetchLiveData = useCallback(async (eventId) => {
     try {
+      await supabase.rpc('set_config', { setting: 'app.parent_access_code', value: activeEvent?.parent_access_code || '', is_local: true });
       const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender').eq('event_id', eventId);
       if (!activities || activities.length === 0) return;
       const { data: results } = await supabase.from('event_results').select('*, students(first_name, last_name, house)').in('event_activity_id', activities.map(a => a.id)).order('recorded_at', { ascending: false });
@@ -4364,6 +4367,7 @@ const ParentPortal = ({ onNavigate }) => {
     if (term.length < 2) { setSearchError('Please enter at least 2 characters.'); return; }
     setIsSearching(true); setSearchError(''); setChildResults(null);
     try {
+      await supabase.rpc('set_config', { setting: 'app.parent_access_code', value: activeEvent?.parent_access_code || '', is_local: true });
       // Find students in this event's school whose name matches
       const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender').eq('event_id', activeEvent.id);
       if (!activities || activities.length === 0) { setChildResults([]); return; }
