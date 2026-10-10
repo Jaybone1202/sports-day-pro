@@ -2040,10 +2040,12 @@ const StudentDirectoryModule = ({ user, showToast }) => {
               Creates a login account. A temporary password will be shown — share it with the staff member directly.
             </p>
             {/* TODO before launch: remove this banner once upgraded to Supabase Pro — Pro enables email invites */}
-            <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex gap-2">
-              <AlertCircle size={14} className="shrink-0 mt-0.5"/>
-              <span><strong>Free tier note:</strong> Disable "Enable email confirmations" in Supabase Dashboard → Authentication → Providers → Email, otherwise the staff member cannot log in until they click a confirmation email. Upgrade to Pro to enable proper email invites.</span>
-            </div>
+            {user.role === 'super_admin' && (
+              <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-300 flex gap-2">
+                <AlertCircle size={14} className="shrink-0 mt-0.5"/>
+                <span><strong>Free tier note:</strong> Disable "Enable email confirmations" in Supabase Dashboard → Authentication → Providers → Email, otherwise the staff member cannot log in until they click a confirmation email. Upgrade to Pro to enable proper email invites.</span>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">First Name</label>
