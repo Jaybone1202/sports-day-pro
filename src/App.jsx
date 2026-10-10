@@ -2104,7 +2104,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
 // FIX: Uses shared calculateStandings() instead of duplicating the logic
 // ==========================================
 
-const LiveStandingsModule = ({ user }) => {
+const LiveStandingsModule = ({ user, showToast }) => {
   const [events, setEvents]             = useState([]);
   const [houseColors, setHouseColors]   = useState({});
   const [selectedEventId, setSelectedEventId] = useState('');
