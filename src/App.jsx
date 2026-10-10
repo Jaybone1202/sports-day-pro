@@ -1792,6 +1792,8 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   const [searchTerm, setSearchTerm]   = useState('');
   const [sortConfig, setSortConfig]   = useState({ key: 'last_name', direction: 'asc' });
   const [deleteStudentModal, setDeleteStudentModal] = useState({ isOpen: false, id: null, name: '' });
+  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
 
   // Staff state
   const [staffList, setStaffList]     = useState([]);
@@ -1844,7 +1846,18 @@ const StudentDirectoryModule = ({ user, showToast }) => {
     const { error } = await supabase.from('students').delete().eq('id', id).eq('school_id', user.school_id);
     if (error) { showToast('Failed to remove student', 'error'); return; }
     setStudents(prev => prev.filter(s => s.id !== id));
+    setSelectedStudentIds(prev => { const n = new Set(prev); n.delete(id); return n; });
     showToast(`${name} removed from directory`);
+  };
+
+  const handleBulkDeleteStudents = async () => {
+    setBulkDeleteConfirm(false);
+    const ids = [...selectedStudentIds];
+    const { error } = await supabase.from('students').delete().in('id', ids).eq('school_id', user.school_id);
+    if (error) { showToast('Failed to delete students', 'error'); return; }
+    setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
+    setSelectedStudentIds(new Set());
+    showToast(`${ids.length} student${ids.length !== 1 ? 's' : ''} removed`);
   };
 
   const filteredAndSorted = React.useMemo(() => {
@@ -1861,6 +1874,22 @@ const StudentDirectoryModule = ({ user, showToast }) => {
       return 0;
     });
   }, [students, searchTerm, sortConfig]);
+
+  const toggleSelectStudent = (id) => setSelectedStudentIds(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const allVisibleSelected = filteredAndSorted.length > 0 && filteredAndSorted.every(s => selectedStudentIds.has(s.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedStudentIds(prev => { const n = new Set(prev); filteredAndSorted.forEach(s => n.delete(s.id)); return n; });
+    } else {
+      setSelectedStudentIds(prev => { const n = new Set(prev); filteredAndSorted.forEach(s => n.add(s.id)); return n; });
+    }
+  };
 
 
   const handleInviteStaff = async () => {
@@ -1898,8 +1927,10 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   const handleRemoveStaff = async () => {
     const { id: staffId, name } = removeModal;
     setRemoveModal({ isOpen: false, id: null, name: '' });
+    // Null out recorded_by references so the FK constraint doesn't block the delete
+    await supabase.from('event_results').update({ recorded_by: null }).eq('recorded_by', staffId);
     const { error } = await supabase.from('users').delete().eq('id', staffId).eq('school_id', user.school_id);
-    if (error) { showToast('Failed to remove staff member', 'error'); return; }
+    if (error) { console.error('Remove staff error:', error); showToast('Failed to remove staff member', 'error'); return; }
     showToast(`${name} removed`);
     fetchStaff();
   };
@@ -1908,6 +1939,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
     <div className="space-y-6">
       <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school?\n\nNote: their login account remains active in the system — only their school access is revoked. Contact your Supabase admin to fully delete the account if needed.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
       <ConfirmModal isOpen={deleteStudentModal.isOpen} title="Remove Student" message={`Permanently remove ${deleteStudentModal.name} from the directory?\n\nThis satisfies a POPIA right-to-erasure request. Their results and trial records will remain in the database and must be removed separately if required.`} confirmText="Remove" onConfirm={handleDeleteStudent} onCancel={() => setDeleteStudentModal({ isOpen: false, id: null, name: '' })}/>
+      <ConfirmModal isOpen={bulkDeleteConfirm} title={`Remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''}?`} message={`This will permanently remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''} from the directory. Results and trial records will remain in the database.`} confirmText="Delete all" onConfirm={handleBulkDeleteStudents} onCancel={() => setBulkDeleteConfirm(false)}/>
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -1933,6 +1965,13 @@ const StudentDirectoryModule = ({ user, showToast }) => {
       </div>
 
       {/* ── STUDENTS TAB ── */}
+      {tab === 'students' && selectedStudentIds.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-700 rounded-xl">
+          <span className="text-sm font-medium text-sky-700 dark:text-sky-300">{selectedStudentIds.size} selected</span>
+          <button onClick={() => setSelectedStudentIds(new Set())} className="text-xs text-sky-500 hover:text-sky-700 dark:hover:text-sky-300 underline">Clear</button>
+          <button onClick={() => setBulkDeleteConfirm(true)} className="ml-auto flex items-center gap-2 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors"><Trash2 size={14}/> Delete {selectedStudentIds.size} student{selectedStudentIds.size !== 1 ? 's' : ''}</button>
+        </div>
+      )}
       {tab === 'students' && (
         <Card className="!p-0 overflow-hidden">
           {isLoading ? (
@@ -1958,7 +1997,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
               <div className="hidden md:block overflow-x-auto max-h-[600px] overflow-y-auto">
                 <table className="w-full text-sm text-left relative">
                   <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10 shadow-sm">
-                    <tr><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/><th className="px-4 py-3 w-12"></th></tr>
+                    <tr><th className="px-4 py-3 w-10"><input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} className="rounded border-slate-300 text-sky-500 focus:ring-sky-400 cursor-pointer"/></th><SortableHeader label="Last Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="First Name" sortKey="first_name" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="Gender" sortKey="gender" sortConfig={sortConfig} onSort={requestSort}/><SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/><th className="px-4 py-3 w-12"></th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {filteredAndSorted.map((student, index) => {
@@ -1970,7 +2009,8 @@ const StudentDirectoryModule = ({ user, showToast }) => {
                       return (
                         <React.Fragment key={student.id}>
                           {showSep && <tr className="bg-slate-100/80 dark:bg-slate-700/40"><td colSpan="7" className="px-4 py-1.5 font-bold text-slate-700 dark:text-slate-300 text-xs uppercase tracking-wider border-y border-slate-200 dark:border-slate-600">{sortConfig.key.replace('_',' ')}: {sepLabel || 'Unassigned'}</td></tr>}
-                          <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+                          <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group ${selectedStudentIds.has(student.id) ? 'bg-sky-50/60 dark:bg-sky-900/10' : ''}`}>
+                            <td className="px-4 py-3"><input type="checkbox" checked={selectedStudentIds.has(student.id)} onChange={() => toggleSelectStudent(student.id)} className="rounded border-slate-300 text-sky-500 focus:ring-sky-400 cursor-pointer"/></td>
                             <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{student.last_name}</td>
                             <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{student.first_name}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400 font-medium">{student.class}</td>
@@ -5302,17 +5342,39 @@ const LoginView = ({ onLogin, onNavigate }) => {
 // FIX: Print CSS injected via <style> tag
 // ==========================================
 
-// Shared nav item list to avoid duplication between desktop sidebar and mobile drawer
-const ORGANISER_NAV = [
-  { view: 'dashboard',   icon: Activity,      label: 'Dashboard'      },
-  { view: 'planning',    icon: Settings,      label: 'Planning'       },
-  { view: 'trials',      icon: ClipboardList, label: 'Trials'         },
-  { view: 'students',    icon: Users,         label: 'Directory'      },
-  { view: 'houses',      icon: Palette,       label: 'Houses'         },
-  { view: 'standings',   icon: Trophy,        label: 'Live Standings' },
-  { view: 'records',     icon: Medal,         label: 'Records'        },
-  { view: 'flags',       icon: AlertCircle,   label: 'Staff Flags'    },
+// Grouped nav — sections make it clear what belongs to setup vs event day vs results
+const ORGANISER_NAV_GROUPS = [
+  {
+    label: 'Overview',
+    items: [
+      { view: 'dashboard', icon: Activity, label: 'Dashboard' },
+    ],
+  },
+  {
+    label: 'Setup',
+    items: [
+      { view: 'planning',  icon: Settings,      label: 'Planning'   },
+      { view: 'students',  icon: Users,         label: 'Directory'  },
+      { view: 'houses',    icon: Palette,       label: 'Houses'     },
+      { view: 'trials',    icon: ClipboardList, label: 'Trials'     },
+    ],
+  },
+  {
+    label: 'Event day',
+    items: [
+      { view: 'standings', icon: Trophy,      label: 'Live standings' },
+      { view: 'flags',     icon: AlertCircle, label: 'Staff flags'    },
+    ],
+  },
+  {
+    label: 'Results',
+    items: [
+      { view: 'records', icon: Medal, label: 'Records' },
+    ],
+  },
 ];
+// Flat list kept for any code that still iterates all nav items
+const ORGANISER_NAV = ORGANISER_NAV_GROUPS.flatMap(g => g.items);
 
 // Hash routing — maps URL hash ↔ app route/view
 const VIEW_TO_HASH = {
@@ -5449,25 +5511,29 @@ export default function App() {
 
   const NavItems = ({ onNavigate }) => (
     <>
-      {ORGANISER_NAV.map(({ view, icon: Icon, label }) => {
-        const isActive = organiserView === view;
-        return (
-          <button key={view}
-            onClick={() => { setOrganiserView(view); if (onNavigate) onNavigate(); }}
-            className={`w-full px-3 py-2.5 rounded-xl flex items-center gap-3 transition-all text-sm font-medium ${
-              isActive
-                ? 'bg-gradient-to-r from-sky-500 to-sky-400 text-white font-semibold shadow-md shadow-sky-200 dark:shadow-sky-900/50'
-                : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200'
-            }`}>
-            <Icon size={18}/> {label}
-            {view === 'flags' && openFlagCount > 0 && (
-              <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{openFlagCount}</span>
-            )}
-            {isActive && view !== 'flags' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80"/>}
-            {isActive && view === 'flags' && openFlagCount === 0 && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80"/>}
-          </button>
-        );
-      })}
+      {ORGANISER_NAV_GROUPS.map(({ label: groupLabel, items }) => (
+        <div key={groupLabel} className="mb-3">
+          <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">{groupLabel}</p>
+          {items.map(({ view, icon: Icon, label }) => {
+            const isActive = organiserView === view;
+            return (
+              <button key={view}
+                onClick={() => { setOrganiserView(view); if (onNavigate) onNavigate(); }}
+                className={`w-full px-3 py-2.5 rounded-xl flex items-center gap-3 transition-all text-sm font-medium ${
+                  isActive
+                    ? 'bg-gradient-to-r from-sky-500 to-sky-400 text-white font-semibold shadow-md shadow-sky-200 dark:shadow-sky-900/50'
+                    : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}>
+                <Icon size={18}/> {label}
+                {view === 'flags' && openFlagCount > 0 && (
+                  <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">{openFlagCount}</span>
+                )}
+                {isActive && !(view === 'flags' && openFlagCount > 0) && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white/80"/>}
+              </button>
+            );
+          })}
+        </div>
+      ))}
       {isSuperAdmin && (
         <button
           onClick={() => { setCurrentRoute('super-admin'); if (onNavigate) onNavigate(); }}
