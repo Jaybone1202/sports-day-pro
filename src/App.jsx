@@ -1358,10 +1358,16 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                         className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-sky-200 dark:border-sky-700 text-sky-700 dark:text-sky-400 text-sm font-semibold hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors">
                         <Save size={14}/> Copy Code
                       </button>
-                      <button onClick={() => { const msg = `🏆 SportsDay Live!\n\nJoin us today using access code: *${parentCode}*\n\nOpen the parent portal at: ${window.location.origin}/?portal=parent`; window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank'); }}
-                        className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
-                        <Smartphone size={14}/> WhatsApp
-                      </button>
+                      {selectedEventId !== 'new' ? (
+                        <button onClick={() => { const msg = `🏆 SportsDay Live!\n\nJoin us today using access code: *${parentCode}*\n\nOpen the parent portal at: ${window.location.origin}/#/parent`; window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank'); }}
+                          className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition-colors">
+                          <Smartphone size={14}/> WhatsApp
+                        </button>
+                      ) : (
+                        <span className="flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-400 text-sm font-semibold cursor-not-allowed" title="Save the event first">
+                          <Smartphone size={14}/> WhatsApp
+                        </span>
+                      )}
                     </div>
                     {selectedEventId === 'new' && (
                       <button onClick={() => setParentCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
@@ -1409,7 +1415,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                 </div>
                                 <div className="flex items-center justify-between">
                                   <div>
-                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Tie-break (szudden death)</p>
+                                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">Tie-break (sudden death)</p>
                                     <p className="text-[11px] text-slate-400">Jump-off / throw-off rounds</p>
                                   </div>
                                   <button type="button" onClick={() => handleSaveTypeDefault(type, 'tiebreakEnabled', !d.tiebreakEnabled)}
@@ -2100,6 +2106,8 @@ const LiveStandingsModule = ({ user }) => {
   const [isLoading, setIsLoading]       = useState(true);
   const [projector, setProjector]       = useState(false);
   const [schoolName, setSchoolName]     = useState('');
+  const [lastRefreshed, setLastRefreshed] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     const fetchEventsAndColors = async () => {
@@ -2141,7 +2149,7 @@ const LiveStandingsModule = ({ user }) => {
           const metricDisplay = isPositionOnly ? `Pos ${Math.round(parseFloat(r.result_value)) - 9000}` : `${r.result_value}${suffix}`;
           return { id: r.id, event: `${act?.age_group} ${act?.gender} ${act?.name}`, time: timeStr, winner: `${sd.first_name || 'Unknown'} ${sd.last_name || ''}`, house: sd.house || 'Unassigned', houseColor: getHouseColor(sd.house, houseColors), metric: metricDisplay, isRecord: r.is_new_record, points: r.calculated_points || 0, placing: r.placing };
         }));
-      } catch (e) { console.error(e); } finally { setIsLoading(false); }
+      } catch (e) { console.error(e); } finally { setIsLoading(false); setIsRefreshing(false); setLastRefreshed(new Date()); }
     };
     fetchLiveData();
     const interval = setInterval(fetchLiveData, 30000);
@@ -2199,10 +2207,17 @@ const LiveStandingsModule = ({ user }) => {
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-700 pb-4 hide-on-print">
         <div><h2 className="text-xl font-bold text-slate-900 dark:text-white">Live Standings &amp; Reports</h2><p className="text-sm text-slate-500 dark:text-slate-400">Real-time event scores and printable report.</p></div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <select value={selectedEventId} onChange={(e) => setSelectedEventId(e.target.value)} className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none bg-white dark:bg-slate-700 dark:text-white font-medium text-slate-700">
             {events.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
           </select>
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => { setIsRefreshing(true); setSelectedEventId(id => id); }} disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50">
+              <Loader2 size={15} className={isRefreshing ? 'animate-spin' : ''}/> Refresh
+            </button>
+            {lastRefreshed && <span className="text-xs text-slate-400 whitespace-nowrap">Updated {lastRefreshed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+          </div>
           <button onClick={() => setProjector(true)} className="flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-sky-900/20 hover:text-sky-600 hover:border-sky-300 transition-colors">
             <Radio size={16}/> Projector
           </button>
@@ -2672,17 +2687,14 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const fetchHistory = useCallback(async () => {
     if (!selectedTrialId) return;
     try {
-      const { data, error } = await supabase.from('trial_results').select('activity_name, unit').eq('trial_id', selectedTrialId);
+      const { data, error } = await supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId);
       if (error) return;
-      const uniqueActs = [];
-      const seen = new Set();
+      const actMap = {};
       (data || []).forEach(tr => {
-        if (!seen.has(tr.activity_name)) {
-          seen.add(tr.activity_name);
-          uniqueActs.push({ name: tr.activity_name, unit: tr.unit, date: 'Saved' });
-        }
+        if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, count: 0 };
+        actMap[tr.activity_name].count++;
       });
-      setTrialHistory(uniqueActs);
+      setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({ name, unit, count })));
     } catch (e) { console.error('History fetch error', e); }
   }, [selectedTrialId]);
 
@@ -2956,7 +2968,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                               <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg shrink-0"><Activity size={14} className="text-purple-600 dark:text-purple-400"/></div>
                               <div>
                                 <p className="font-semibold text-slate-800 dark:text-white text-sm group-hover:text-purple-700">{item.name}</p>
-                                <p className="text-xs text-slate-400">{item.unit}</p>
+                                <p className="text-xs text-slate-400">{item.unit} · <span className="text-purple-500 font-semibold">{item.count} student{item.count !== 1 ? 's' : ''}</span></p>
                               </div>
                             </button>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3426,7 +3438,6 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       const nextHeat = activeHeat + 1;
       if (groupedRoster[nextHeat]) {
         setActiveHeat(nextHeat);
-        setScores({});
         setTimerSeconds(timerPreset);
         setTimerRunning(true);
       }
@@ -3809,7 +3820,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       {/* Heat navigation bar */}
       {heatSize !== 'All' && heatKeys.length > 1 && (
         <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
-          <button onClick={() => { if (activeHeat > 1) { if (isDirty) { setPendingHeat(activeHeat - 1); setShowUnsavedHeatModal(true); } else { setActiveHeat(h => h - 1); setScores({}); } } }} disabled={activeHeat <= 1}
+          <button onClick={() => { if (activeHeat > 1) { if (isDirty) { setPendingHeat(activeHeat - 1); setShowUnsavedHeatModal(true); } else { setActiveHeat(h => h - 1); } } }} disabled={activeHeat <= 1}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronLeft size={20}/></button>
           <div className="flex-1 flex items-center justify-center gap-2 flex-wrap">
             {heatKeys.map(h => {
@@ -3817,7 +3828,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               const done = savedHeats.has(num);
               const active = activeHeat === num;
               return (
-                <button key={h} onClick={() => { if (isDirty) { setPendingHeat(num); setShowUnsavedHeatModal(true); } else { setActiveHeat(num); setScores({}); } }}
+                <button key={h} onClick={() => { if (isDirty) { setPendingHeat(num); setShowUnsavedHeatModal(true); } else { setActiveHeat(num); } }}
                   className={`w-9 h-9 rounded-full text-sm font-bold transition-colors flex items-center justify-center
                     ${active ? 'bg-sky-500 text-white shadow-md' : done ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700' : 'bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-600'}`}>
                   {done ? '✓' : num}
@@ -3825,7 +3836,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               );
             })}
           </div>
-          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { if (isDirty) { setPendingHeat(next); setShowUnsavedHeatModal(true); } else { setActiveHeat(next); setScores({}); } } }} disabled={!groupedRoster[activeHeat + 1]}
+          <button onClick={() => { const next = activeHeat + 1; if (groupedRoster[next]) { if (isDirty) { setPendingHeat(next); setShowUnsavedHeatModal(true); } else { setActiveHeat(next); } } }} disabled={!groupedRoster[activeHeat + 1]}
             className="p-2.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30 text-slate-600 dark:text-slate-300 transition-colors"><ChevronRight size={20}/></button>
 
           {/* Position-mode toggle for whole heat (only for hybrid track activities) */}
@@ -3863,6 +3874,51 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           </div>
         </div>
       )}
+
+      {/* Timer for non-heat mode (track events need timing even without heats) */}
+      {heatSize === 'All' && isTrack && (
+        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-700">
+          <Timer size={16} className="text-slate-400"/>
+          <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Timer</span>
+          {timerRunning || timerSeconds > 0 ? (
+            <div className={`flex items-center gap-1.5 font-mono font-bold text-lg ${timerSeconds <= 30 ? 'text-red-500' : 'text-slate-700 dark:text-slate-200'}`}>
+              {Math.floor(timerSeconds/60)}:{String(timerSeconds%60).padStart(2,'0')}
+              <button onClick={() => { setTimerRunning(false); setTimerSeconds(0); }} className="text-slate-400 hover:text-slate-600 ml-1"><X size={14}/></button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <select value={timerPreset} onChange={e => setTimerPreset(parseInt(e.target.value))} className="text-xs bg-transparent outline-none text-slate-500 cursor-pointer">
+                <option value={60}>1 min</option>
+                <option value={120}>2 min</option>
+                <option value={180}>3 min</option>
+                <option value={300}>5 min</option>
+              </select>
+              <button onClick={() => { setTimerSeconds(timerPreset); setTimerRunning(true); }} className="flex items-center gap-1 text-xs text-slate-500 hover:text-sky-600 px-2 py-1 rounded hover:bg-sky-50 transition-colors">
+                <Timer size={14}/> Start
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All-done banner — appears once every student on the roster has a saved score */}
+      {!isLoading && studentRoster.length > 0 && !isDirty && lastSavedTime && (() => {
+        const scoredCount = studentRoster.filter(s => savedStudentIds.has(s.id) || scores[s.id]).length;
+        const kickedCount = eventAbsentees.length;
+        const total = studentRoster.length + kickedCount;
+        const allDone = scoredCount + kickedCount >= total;
+        if (!allDone) return null;
+        return (
+          <div className="flex items-center gap-4 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl">
+            <CheckCircle2 size={28} className="text-emerald-500 flex-shrink-0"/>
+            <div className="flex-1">
+              <p className="font-bold text-emerald-800 dark:text-emerald-200">Activity complete!</p>
+              <p className="text-sm text-emerald-600 dark:text-emerald-400">All {total} students scored. You can go back to the activity list.</p>
+            </div>
+            <Button onClick={handleClose} variant="primary">Back to Activities</Button>
+          </div>
+        );
+      })()}
 
       <Card className="!p-0 overflow-hidden relative min-h-[300px]">
         {isLoading && !isRefreshingRoster ? (
