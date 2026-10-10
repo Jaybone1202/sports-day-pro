@@ -1840,9 +1840,18 @@ const StudentDirectoryModule = ({ user, showToast }) => {
     setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
   };
 
+  const anonymiseStudentResults = async (ids) => {
+    // POPIA right-to-erasure: delete all result rows linked to the student
+    await Promise.all([
+      supabase.from('event_results').delete().in('student_id', ids),
+      supabase.from('trial_results').delete().in('student_id', ids),
+    ]);
+  };
+
   const handleDeleteStudent = async () => {
     const { id, name } = deleteStudentModal;
     setDeleteStudentModal({ isOpen: false, id: null, name: '' });
+    await anonymiseStudentResults([id]);
     const { error } = await supabase.from('students').delete().eq('id', id).eq('school_id', user.school_id);
     if (error) { showToast('Failed to remove student', 'error'); return; }
     setStudents(prev => prev.filter(s => s.id !== id));
@@ -1853,6 +1862,7 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   const handleBulkDeleteStudents = async () => {
     setBulkDeleteConfirm(false);
     const ids = [...selectedStudentIds];
+    await anonymiseStudentResults(ids);
     const { error } = await supabase.from('students').delete().in('id', ids).eq('school_id', user.school_id);
     if (error) { showToast('Failed to delete students', 'error'); return; }
     setStudents(prev => prev.filter(s => !selectedStudentIds.has(s.id)));
@@ -1938,8 +1948,8 @@ const StudentDirectoryModule = ({ user, showToast }) => {
   return (
     <div className="space-y-6">
       <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school?\n\nNote: their login account remains active in the system — only their school access is revoked. Contact your Supabase admin to fully delete the account if needed.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
-      <ConfirmModal isOpen={deleteStudentModal.isOpen} title="Remove Student" message={`Permanently remove ${deleteStudentModal.name} from the directory?\n\nThis satisfies a POPIA right-to-erasure request. Their results and trial records will remain in the database and must be removed separately if required.`} confirmText="Remove" onConfirm={handleDeleteStudent} onCancel={() => setDeleteStudentModal({ isOpen: false, id: null, name: '' })}/>
-      <ConfirmModal isOpen={bulkDeleteConfirm} title={`Remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''}?`} message={`This will permanently remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''} from the directory. Results and trial records will remain in the database.`} confirmText="Delete all" onConfirm={handleBulkDeleteStudents} onCancel={() => setBulkDeleteConfirm(false)}/>
+      <ConfirmModal isOpen={deleteStudentModal.isOpen} title="Remove Student" message={`Permanently remove ${deleteStudentModal.name} from the directory?\n\nThis will also delete all their event results and trial results. This action cannot be undone.`} confirmText="Remove" onConfirm={handleDeleteStudent} onCancel={() => setDeleteStudentModal({ isOpen: false, id: null, name: '' })}/>
+      <ConfirmModal isOpen={bulkDeleteConfirm} title={`Remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''}?`} message={`This will permanently remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''} from the directory, along with all their event results and trial results. This action cannot be undone.`} confirmText="Delete all" onConfirm={handleBulkDeleteStudents} onCancel={() => setBulkDeleteConfirm(false)}/>
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -5368,7 +5378,7 @@ const LoginView = ({ onLogin, onNavigate }) => {
                   <h3 className="font-semibold text-slate-800">4. Data storage and security</h3>
                   <p>All data is stored securely on Supabase infrastructure with row-level security policies. Access is restricted by school and role. Student data is visible only to authorised staff at the same school.</p>
                   <h3 className="font-semibold text-slate-800">5. Retention and deletion</h3>
-                  <p>Schools may delete student records at any time via the Directory. Individual student removal satisfies POPIA right-to-erasure requests. Event results linked to deleted students are anonymised (the student identifier is removed).</p>
+                  <p>Schools may delete student records at any time via the Directory. When a student is removed, all associated event results and trial results are permanently deleted alongside the student record. This satisfies POPIA right-to-erasure requests.</p>
                   <h3 className="font-semibold text-slate-800">6. Your rights under POPIA</h3>
                   <p>You have the right to access, correct, or request deletion of personal information we hold. Contact your school organiser or reach us at the address on your school's subscription to exercise these rights.</p>
                   <h3 className="font-semibold text-slate-800">7. Responsible party</h3>
