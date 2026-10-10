@@ -27,7 +27,7 @@ SET search_path = public
 AS $$
   SELECT id FROM events
   WHERE parent_access_code = current_setting('app.parent_access_code', true)
-    AND status IN ('active', 'locked')
+    AND is_active = true
   LIMIT 1;
 $$;
 
