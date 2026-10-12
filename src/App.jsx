@@ -2903,7 +2903,8 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const [selectedEventId, setSelectedEventId]   = useState(() => localStorage.getItem('sdp-staff-event') || '');
   const [allTrials, setAllTrials]               = useState([]);
   const [selectedTrialId, setSelectedTrialId]   = useState('');
-  const [trialFilters, setTrialFilters]         = useState({ ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: '', unit: 'seconds' });
+  const [trialFilters, setTrialFilters]         = useState({ ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: '', unit: 'seconds', scoringMode: 'standard', numAttempts: 3, heights: [] });
+  const [newHeightInput, setNewHeightInput]     = useState('');
   const [trialHistory, setTrialHistory]         = useState([]);
   const [isLoading, setIsLoading]               = useState(false);
   const [modalConfig, setModalConfig]           = useState({ isOpen: false, type: null, payload: null });
@@ -2983,10 +2984,17 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     try {
       const [{ data: results }, { data: sessions }] = await Promise.all([
         supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId),
-        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json').eq('trial_id', selectedTrialId),
+        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json').eq('trial_id', selectedTrialId),
       ]);
       const sessionMap = {};
-      (sessions || []).forEach(s => { sessionMap[s.activity_name] = s.filters_json; });
+      (sessions || []).forEach(s => {
+        sessionMap[s.activity_name] = {
+          ...(s.filters_json || {}),
+          scoringMode: s.scoring_mode || 'standard',
+          numAttempts: s.num_attempts || 3,
+          heights: s.heights_json || [],
+        };
+      });
       const actMap = {};
       (results || []).forEach(tr => {
         if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, count: 0 };
@@ -3014,8 +3022,21 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     // same roster loads automatically. Falls back to current UI filters if
     // this activity predates the schema change.
     const restoredFilters = item.savedFilters
-      ? { ageGroup: item.savedFilters.ageGroup || 'All', gender: item.savedFilters.gender || 'All', house: item.savedFilters.house || 'All', className: item.savedFilters.className || '' }
-      : { ageGroup: trialFilters.ageGroup, gender: trialFilters.gender, house: trialFilters.house, className: trialFilters.className };
+      ? {
+          ageGroup: item.savedFilters.ageGroup || 'All',
+          gender: item.savedFilters.gender || 'All',
+          house: item.savedFilters.house || 'All',
+          className: item.savedFilters.className || '',
+          scoringMode: item.savedFilters.scoringMode || 'standard',
+          numAttempts: item.savedFilters.numAttempts || 3,
+          heights: item.savedFilters.heights || [],
+        }
+      : {
+          ageGroup: trialFilters.ageGroup, gender: trialFilters.gender,
+          house: trialFilters.house, className: trialFilters.className,
+          scoringMode: trialFilters.scoringMode, numAttempts: trialFilters.numAttempts,
+          heights: trialFilters.heights,
+        };
     const filters = { ...restoredFilters, customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
     onSelectActivity({ isTrial: true, trialData: t, filters, isHistory: true, refreshHistoryCallback: fetchHistory });
@@ -3212,6 +3233,48 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   </div>
                 </div>
 
+                {/* Row 1b: Scoring mode */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Scoring Mode</label>
+                    <select value={trialFilters.scoringMode} onChange={(e) => setTrialFilters({...trialFilters, scoringMode: e.target.value, numAttempts: 3, heights: []})}
+                      className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
+                      <option value="standard">Standard (single result)</option>
+                      <option value="best_of_n">Best of N attempts</option>
+                      <option value="heights">Heights / Tiers</option>
+                    </select>
+                  </div>
+                  {trialFilters.scoringMode === 'best_of_n' && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Number of Attempts</label>
+                      <input type="number" min="2" max="6" value={trialFilters.numAttempts}
+                        onChange={(e) => setTrialFilters({...trialFilters, numAttempts: Math.max(2, Math.min(6, parseInt(e.target.value)||3))})}
+                        className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm text-center"/>
+                    </div>
+                  )}
+                  {trialFilters.scoringMode === 'heights' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Heights (m) — add in order</label>
+                      <div className="flex flex-wrap gap-1.5 mb-1.5">
+                        {trialFilters.heights.map((h, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 px-2 py-0.5 rounded-full text-xs font-mono">
+                            {h}m
+                            <button onClick={() => setTrialFilters(f => ({...f, heights: f.heights.filter((_, j) => j !== i)}))} className="text-purple-400 hover:text-red-500 ml-0.5">×</button>
+                          </span>
+                        ))}
+                        {trialFilters.heights.length === 0 && <span className="text-xs text-slate-400 italic">No heights added yet</span>}
+                      </div>
+                      <div className="flex gap-2">
+                        <input type="number" step="0.01" placeholder="e.g. 1.00" value={newHeightInput} onChange={e => setNewHeightInput(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') { const v = parseFloat(newHeightInput); if (!isNaN(v) && v > 0 && !trialFilters.heights.includes(v)) { setTrialFilters(f => ({...f, heights: [...f.heights, v].sort((a,b)=>a-b)})); setNewHeightInput(''); } } }}
+                          className="flex-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg outline-none text-sm bg-white dark:bg-slate-700 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                        <button onClick={() => { const v = parseFloat(newHeightInput); if (!isNaN(v) && v > 0 && !trialFilters.heights.includes(v)) { setTrialFilters(f => ({...f, heights: [...f.heights, v].sort((a,b)=>a-b)})); setNewHeightInput(''); } }}
+                          className="px-3 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors">Add</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Row 2: Who are we scoring — always visible */}
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Filter roster to</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-700">
@@ -3383,6 +3446,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     setIsDirty(true);
   };
 
+  // Trial-specific scoring mode state
+  const tScoringMode  = isTrial ? (activity.filters?.scoringMode  || 'standard') : 'standard';
+  const tNumAttempts  = isTrial ? (activity.filters?.numAttempts  || 3)           : 3;
+  const tHeights      = isTrial ? (activity.filters?.heights      || [])          : [];
+  const [trialAttempts, setTrialAttempts]   = useState({}); // { sid: { 1: val, 2: val, ... } }
+  const [heightResults, setHeightResults]   = useState({}); // { sid: { '1.00': 'o'|'x'|'-' } }
+  const [jumpOffScores, setJumpOffScores]   = useState({}); // { sid: value } for heights jump-off
+
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
   const [currentAttemptNum, setCurrentAttemptNum] = useState(1);
@@ -3425,12 +3496,25 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           if (existing && existing.length > 0) {
             const loaded = {};
             const extras = [];
+            const attLoaded = {};
+            const htLoaded = {};
             existing.forEach(tr => {
               const sd = Array.isArray(tr.students) ? tr.students[0] : (tr.students || null);
-              if (sd) { loaded[sd.id] = tr.result_value; if (!filtered.some(s => s.id === sd.id)) extras.push(sd); }
+              if (sd) {
+                loaded[sd.id] = tr.result_value;
+                if (tr.attempts_json) {
+                  if (tScoringMode === 'best_of_n') attLoaded[sd.id] = tr.attempts_json;
+                  else if (tScoringMode === 'heights') htLoaded[sd.id] = tr.attempts_json;
+                }
+                if (!filtered.some(s => s.id === sd.id)) extras.push(sd);
+              }
             });
             setStudentRoster([...filtered, ...extras]);
-            if (!isRefresh) setScores(loaded);
+            if (!isRefresh) {
+              setScores(loaded);
+              setTrialAttempts(attLoaded);
+              setHeightResults(htLoaded);
+            }
           } else setStudentRoster(filtered);
         } else setStudentRoster(filtered);
 
@@ -3689,16 +3773,25 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     setIsSaving(true);
     try {
       if (isTrial) {
+        const tScoringMode = activity.filters.scoringMode || 'standard';
         await supabase.from('trial_results').delete().eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName).in('student_id', withScores);
-        const rows = withScores.map(sid => ({ trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit }));
+        const rows = withScores.map(sid => {
+          let attJson = null;
+          if (tScoringMode === 'best_of_n') attJson = trialAttempts[sid] || null;
+          else if (tScoringMode === 'heights') attJson = heightResults[sid] || null;
+          return { trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit, attempts_json: attJson };
+        });
         const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
         if (trialErr) throw trialErr;
-        // Persist the filters used so reopening this activity auto-restores the same roster
+        // Persist the filters + scoring config so reopening this activity auto-restores exactly
         await supabase.from('trial_activity_sessions').upsert({
           trial_id:      activity.trialData.id,
           activity_name: activity.filters.customActivityName,
           unit:          activity.filters.unit,
           filters_json:  { ageGroup: activity.filters.ageGroup, gender: activity.filters.gender, house: activity.filters.house, className: activity.filters.className },
+          scoring_mode:  tScoringMode,
+          num_attempts:  activity.filters.numAttempts || 3,
+          heights_json:  activity.filters.heights || null,
           updated_at:    new Date().toISOString(),
         }, { onConflict: 'trial_id, activity_name' });
         showToast(`Successfully saved ${rows.length} trial records!`);
@@ -4276,7 +4369,68 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                           {savedStudentIds.has(student.id) && !scores[student.id] && positionOverrides[student.id] === undefined && (
                             <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0"/>
                           )}
-                          {isPlacingMode || positionOverrides[student.id] !== undefined ? (
+                          {isTrial && tScoringMode === 'best_of_n' ? (() => {
+                            const atts = trialAttempts[student.id] || {};
+                            const vals = Array.from({length: tNumAttempts}, (_, i) => parseFloat(atts[i+1])).filter(v => !isNaN(v) && v >= 0);
+                            const best = vals.length > 0 ? Math.max(...vals) : null;
+                            return (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex gap-1 flex-wrap justify-end">
+                                  {Array.from({length: tNumAttempts}, (_, i) => {
+                                    const v = atts[i+1] !== undefined ? String(atts[i+1]) : '';
+                                    const isBest = best !== null && parseFloat(v) === best && v !== '';
+                                    return (
+                                      <div key={i} className="flex flex-col items-center">
+                                        <span className="text-[9px] text-slate-400">A{i+1}</span>
+                                        <input type="number" step="0.01" value={v} placeholder="—"
+                                          onChange={e => {
+                                            const updated = { ...atts, [i+1]: e.target.value };
+                                            setTrialAttempts(prev => ({ ...prev, [student.id]: updated }));
+                                            const nv = Array.from({length: tNumAttempts}, (_, j) => parseFloat(updated[j+1])).filter(n => !isNaN(n) && n >= 0);
+                                            const nb = nv.length > 0 ? Math.max(...nv) : null;
+                                            setScores(prev => nb !== null ? { ...prev, [student.id]: nb } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                            setIsDirty(true);
+                                          }}
+                                          className={`w-16 px-1.5 py-2 border rounded-lg text-right font-mono text-xs outline-none touch-manipulation [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBest ? 'border-emerald-400 bg-emerald-50 font-bold text-emerald-700' : 'border-slate-200 bg-slate-50 dark:bg-slate-700 dark:text-white dark:border-slate-600'}`}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {best !== null && <span className="text-xs font-bold text-emerald-600">Best: {best}</span>}
+                              </div>
+                            );
+                          })() : isTrial && tScoringMode === 'heights' ? (() => {
+                            const hr = heightResults[student.id] || {};
+                            const cleared = tHeights.filter(h => hr[h] === 'o');
+                            const highest = cleared.length > 0 ? Math.max(...cleared.map(parseFloat)) : null;
+                            return (
+                              <div className="flex flex-col gap-1 items-end">
+                                {tHeights.map(h => {
+                                  const status = hr[h] || '-';
+                                  return (
+                                    <div key={h} className="flex items-center gap-1">
+                                      <span className="text-[10px] text-slate-400 w-10 text-right font-mono">{h}m</span>
+                                      {['o','x','-'].map(btn => (
+                                        <button key={btn} onClick={() => {
+                                          const updated = { ...hr, [h]: btn };
+                                          setHeightResults(prev => ({ ...prev, [student.id]: updated }));
+                                          const cls = tHeights.filter(ht => updated[ht] === 'o');
+                                          const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
+                                          setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                          setIsDirty(true);
+                                        }}
+                                          className={`px-2 py-1 rounded text-xs font-bold touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white' : btn === 'x' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                                          {btn === 'o' ? '✓' : btn === 'x' ? '✗' : '—'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  );
+                                })}
+                                {highest !== null && <span className="text-xs font-bold text-emerald-600">{highest}m</span>}
+                              </div>
+                            );
+                          })() : isPlacingMode || positionOverrides[student.id] !== undefined ? (
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex gap-1 flex-wrap justify-end max-w-[180px]">
                                 {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => {
@@ -4344,7 +4498,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                     {isTrial && <SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/>}
                     <SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/>
                     {!isTrial && <th className="px-4 py-3 font-semibold text-center text-slate-400 text-xs">Trial Score</th>}
-                    <th className="px-4 py-3 font-semibold w-48 text-right">Result ({unitLabel})</th>
+                    <th className={`px-4 py-3 font-semibold text-right ${isTrial && tScoringMode !== 'standard' ? 'min-w-[320px]' : 'w-48'}`}>
+                      {isTrial && tScoringMode === 'best_of_n' ? `Attempts (best of ${tNumAttempts}) — ${unitLabel}` : isTrial && tScoringMode === 'heights' ? `Heights (✓ cleared / ✗ failed / — skip)` : `Result (${unitLabel})`}
+                    </th>
                     {!isTrial && <th className="px-4 py-3 w-12"></th>}
                   </tr>
                 </thead>
@@ -4382,7 +4538,67 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
                                 {!isTrial && <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">{student.best_trial_score ?? '--'}</td>}
                                 <td className="px-4 py-3 text-right">
-                                  {isPlacingMode || positionOverrides[student.id] !== undefined ? (
+                                  {isTrial && tScoringMode === 'best_of_n' ? (() => {
+                                    const atts = trialAttempts[student.id] || {};
+                                    const vals = Array.from({length: tNumAttempts}, (_, i) => parseFloat(atts[i+1])).filter(v => !isNaN(v) && v >= 0);
+                                    const best = vals.length > 0 ? Math.max(...vals) : null;
+                                    return (
+                                      <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                                        {Array.from({length: tNumAttempts}, (_, i) => {
+                                          const v = atts[i+1] !== undefined ? String(atts[i+1]) : '';
+                                          const isBest = best !== null && parseFloat(v) === best && v !== '';
+                                          return (
+                                            <div key={i} className="flex flex-col items-center gap-0.5">
+                                              <span className="text-[10px] text-slate-400">A{i+1}</span>
+                                              <input type="number" step="0.01" value={v} placeholder="—"
+                                                onChange={e => {
+                                                  const updated = { ...atts, [i+1]: e.target.value };
+                                                  setTrialAttempts(prev => ({ ...prev, [student.id]: updated }));
+                                                  const newVals = Array.from({length: tNumAttempts}, (_, j) => parseFloat(updated[j+1])).filter(n => !isNaN(n) && n >= 0);
+                                                  const newBest = newVals.length > 0 ? Math.max(...newVals) : null;
+                                                  setScores(prev => newBest !== null ? { ...prev, [student.id]: newBest } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                                  setIsDirty(true);
+                                                }}
+                                                className={`w-20 px-2 py-2 border rounded-lg text-right font-mono text-sm outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBest ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-300 font-bold text-emerald-700' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white'}`}
+                                              />
+                                            </div>
+                                          );
+                                        })}
+                                        {best !== null && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-1 whitespace-nowrap">Best: {best} {unitLabel}</span>}
+                                      </div>
+                                    );
+                                  })() : isTrial && tScoringMode === 'heights' ? (() => {
+                                    const hr = heightResults[student.id] || {};
+                                    const cleared = tHeights.filter(h => hr[h] === 'o');
+                                    const highest = cleared.length > 0 ? Math.max(...cleared.map(parseFloat)) : null;
+                                    return (
+                                      <div className="flex flex-col gap-1 items-end">
+                                        {tHeights.map(h => {
+                                          const status = hr[h] || '-';
+                                          return (
+                                            <div key={h} className="flex items-center gap-1.5">
+                                              <span className="text-xs text-slate-500 w-12 text-right font-mono">{h}m</span>
+                                              {['o','x','-'].map(btn => (
+                                                <button key={btn} onClick={() => {
+                                                  const updated = { ...hr, [h]: btn };
+                                                  setHeightResults(prev => ({ ...prev, [student.id]: updated }));
+                                                  const cls = tHeights.filter(ht => updated[ht] === 'o');
+                                                  const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
+                                                  setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                                  setIsDirty(true);
+                                                }}
+                                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white' : btn === 'x' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                  {btn === 'o' ? '✓' : btn === 'x' ? '✗' : '—'}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          );
+                                        })}
+                                        {tHeights.length === 0 && <span className="text-xs text-slate-400 italic">No heights set</span>}
+                                        {highest !== null && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">Cleared: {highest}m</span>}
+                                      </div>
+                                    );
+                                  })() : isPlacingMode || positionOverrides[student.id] !== undefined ? (
                                     <div className="flex flex-col items-end gap-1">
                                       <div className="flex gap-1.5 flex-wrap justify-end">
                                         {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => {
@@ -4463,6 +4679,43 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           </>
         )}
       </Card>
+
+      {/* Heights mode: jump-off section */}
+      {isTrial && tScoringMode === 'heights' && tHeights.length > 0 && (() => {
+        const allHighests = studentRoster.map(s => {
+          const hr = heightResults[s.id] || {};
+          const cls = tHeights.filter(h => hr[h] === 'o');
+          return { s, val: cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null };
+        }).filter(x => x.val !== null);
+        if (allHighests.length < 2) return null;
+        const topVal = Math.max(...allHighests.map(x => x.val));
+        const tied = allHighests.filter(x => x.val === topVal);
+        if (tied.length < 2) return null;
+        return (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
+            <h4 className="font-bold text-amber-800 dark:text-amber-200 mb-1 flex items-center gap-2"><AlertCircle size={16}/> Jump-off — {tied.length} athletes tied at {topVal}m</h4>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">Enter each athlete's jump-off result. This overrides their main result for final ranking.</p>
+            <div className="space-y-2">
+              {tied.map(({ s }) => (
+                <div key={s.id} className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-40 truncate">{s.last_name}, {s.first_name}</span>
+                  <input type="number" step="0.01" placeholder="Jump-off result"
+                    value={jumpOffScores[s.id] || ''}
+                    onChange={e => {
+                      setJumpOffScores(prev => ({ ...prev, [s.id]: e.target.value }));
+                      if (e.target.value && parseFloat(e.target.value) >= 0) {
+                        setScores(prev => ({ ...prev, [s.id]: parseFloat(e.target.value) }));
+                        setIsDirty(true);
+                      }
+                    }}
+                    className="w-36 px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-lg text-right font-mono text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white dark:bg-slate-700 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                  <span className="text-xs text-slate-400">m</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Flag Issue Modal */}
       {showFlagModal && (
