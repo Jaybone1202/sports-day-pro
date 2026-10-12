@@ -4849,6 +4849,7 @@ const RecordBoardModule = ({ user, showToast }) => {
   const [editingRecord, setEditingRecord] = useState(null);
   const [filterAge, setFilterAge]     = useState('All');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [clearConfirm, setClearConfirm]       = useState(false);
   const [form, setForm] = useState({ activity_name: '', age_group: 'U10', record_value: '', holder_name: '', record_year: new Date().getFullYear() });
 
   const fetchData = async () => {
@@ -4922,11 +4923,23 @@ const RecordBoardModule = ({ user, showToast }) => {
     fetchData();
   };
 
+  const handleClearAllRecords = async () => {
+    setClearConfirm(false);
+    const [r1, r2] = await Promise.all([
+      supabase.from('historical_records').delete().eq('school_id', mySchoolId),
+      supabase.from('event_records').delete().eq('school_id', mySchoolId),
+    ]);
+    if (r1.error || r2.error) { showToast('Failed to clear records', 'error'); return; }
+    showToast('All records cleared');
+    fetchData();
+  };
+
   const myRecords = records.filter(r => r.school_id === mySchoolId);
   const ageGroups = [...new Set(records.map(r => r.age_group))].sort();
 
   return (
     <div className="space-y-6">
+      <ConfirmModal isOpen={clearConfirm} title="Clear all records?" message={`This will permanently delete all your school's records from the board and all event records. This cannot be undone.`} confirmText="Clear all" onConfirm={handleClearAllRecords} onCancel={() => setClearConfirm(false)}/>
       {/* Header */}
       <div className="flex items-center justify-between pb-5 border-b border-slate-100 dark:border-slate-700">
         <div>
@@ -5025,7 +5038,14 @@ const RecordBoardModule = ({ user, showToast }) => {
         <>
           <div className="flex justify-between items-center">
             <p className="text-sm text-slate-500">{myRecords.length} record{myRecords.length !== 1 ? 's' : ''} from your school</p>
-            <Button onClick={openAdd}><Plus size={16}/> Add Record</Button>
+            <div className="flex items-center gap-2">
+              {myRecords.length > 0 && (
+                <button onClick={() => setClearConfirm(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                  <Trash2 size={14}/> Clear all
+                </button>
+              )}
+              <Button onClick={openAdd}><Plus size={16}/> Add Record</Button>
+            </div>
           </div>
 
           {myRecords.length === 0 ? (
