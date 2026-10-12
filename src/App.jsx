@@ -3003,7 +3003,9 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   };
 
   const openHistorySession = (item) => {
-    const filters = { ...trialFilters, customActivityName: item.name, unit: item.unit };
+    // Always open with no filters so all previously-scored students load regardless
+    // of what filter values are currently in the new-session form
+    const filters = { ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
     onSelectActivity({ isTrial: true, trialData: t, filters, isHistory: true, refreshHistoryCallback: fetchHistory });
   };
@@ -5335,6 +5337,47 @@ const SuperAdminPanel = ({ user, onBack }) => {
   const [allEvents, setAllEvents]     = useState([]);
   const [expandedSchool, setExpandedSchool] = useState(null);
   const [recordsPublic, setRecordsPublic] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportBackup = async () => {
+    setIsExporting(true);
+    try {
+      const [
+        { data: students },
+        { data: events },
+        { data: event_activities },
+        { data: event_results },
+        { data: trial_results },
+        { data: school_houses },
+        { data: event_records },
+        { data: historical_records },
+      ] = await Promise.all([
+        supabase.from('students').select('*').eq('school_id', user.school_id),
+        supabase.from('events').select('*').eq('school_id', user.school_id),
+        supabase.from('event_activities').select('*'),
+        supabase.from('event_results').select('*'),
+        supabase.from('trial_results').select('*'),
+        supabase.from('school_houses').select('*').eq('school_id', user.school_id),
+        supabase.from('event_records').select('*').eq('school_id', user.school_id),
+        supabase.from('historical_records').select('*').eq('school_id', user.school_id),
+      ]);
+      const backup = {
+        exported_at: new Date().toISOString(),
+        school_id: user.school_id,
+        students, events, event_activities, event_results,
+        trial_results, school_houses, event_records, historical_records,
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sportsday-backup-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Export failed: ' + e.message);
+    } finally { setIsExporting(false); }
+  };
 
   const toggleRecordsBoard = async () => {
     const next = !recordsPublic;
@@ -5382,6 +5425,10 @@ const SuperAdminPanel = ({ user, onBack }) => {
             <Badge color="purple">Super Admin</Badge>
           </div>
           <p className="text-sm text-slate-500 mt-0.5">All schools and activity across SportsDay Pro</p>
+          <button onClick={handleExportBackup} disabled={isExporting} className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold transition-colors disabled:opacity-60">
+            {isExporting ? <Loader2 size={15} className="animate-spin"/> : <Download size={15}/>}
+            {isExporting ? 'Exporting…' : 'Export Backup (JSON)'}
+          </button>
         </div>
       </div>
 
