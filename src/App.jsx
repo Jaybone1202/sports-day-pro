@@ -3404,17 +3404,19 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           if (classList.length > 0) filtered = filtered.filter(s => classList.some(c => (s.class||'').toLowerCase().startsWith(c)));
         }
         if (activity.isHistory) {
+          // History mode: only show students who have saved results — ignore the
+          // filtered roster so we don't bleed in students from other age groups
           const { data: existing } = await supabase.from('trial_results').select('*, students(*)').eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName);
           if (existing && existing.length > 0) {
             const loaded = {};
-            const extras = [];
+            const historyRoster = [];
             existing.forEach(tr => {
               const sd = Array.isArray(tr.students) ? tr.students[0] : (tr.students || null);
-              if (sd) { loaded[sd.id] = tr.result_value; if (!filtered.some(s => s.id === sd.id)) extras.push(sd); }
+              if (sd) { loaded[sd.id] = tr.result_value; historyRoster.push(sd); }
             });
-            setStudentRoster([...filtered, ...extras]);
+            setStudentRoster(historyRoster);
             if (!isRefresh) setScores(loaded);
-          } else setStudentRoster(filtered);
+          } else setStudentRoster([]);
         } else setStudentRoster(filtered);
 
       } else {
