@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
 
 import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -654,11 +656,61 @@ const DataImportModule = ({ onBack, user, showToast }) => {
     reader.readAsText(file);
   };
 
+  const processPDFFile = async (file) => {
+    setFileName(file.name);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        fullText += content.items.map(it => it.str).join(' ') + '\n';
+      }
+
+      // Derive class from filename ("6.2.pdf" → "6.2") or PDF header
+      let derivedClass = file.name.replace(/\.pdf$/i, '');
+      const headerMatch = fullText.match(/Grade\s+(\d+)\s+(\d+)/i);
+      if (headerMatch) derivedClass = `${headerMatch[1]}.${headerMatch[2]}`;
+
+      // Match student rows: number, SURNAME(S), First Name, YYYY-MM-DD, U/XX, M/F, House
+      const rowRegex = /\b\d+\s+([A-Z][A-Z\-\s]+?)\s+([A-Z][a-z][\w\-\s]*?)\s+(\d{4}-\d{2}-\d{2})\s+(U\/?\d+)\s+([MF])\s+([A-Za-z]+)/g;
+      const validRows = [], invalidRows = [];
+      let match;
+      let rowNum = 0;
+      while ((match = rowRegex.exec(fullText)) !== null) {
+        rowNum++;
+        const [, rawSurname, rawFirst, , rawAge, rawGender, rawHouse] = match;
+        const lastName  = rawSurname.trim().replace(/\s+/g, '-');
+        const firstName = rawFirst.trim();
+        let ageGroup = rawAge.toUpperCase().replace(/[\/\s\-]/g, '');
+        if (/^\d+$/.test(ageGroup)) ageGroup = `U${ageGroup}`;
+        const gender = rawGender === 'M' ? 'Boys' : 'Girls';
+        const house  = rawHouse.trim();
+        const rowObj = { firstName, lastName, ageGroup, gender, house, class: derivedClass };
+        const v = validateStudent(rowObj);
+        if (v.success) validRows.push(v.data);
+        else invalidRows.push({ rowNumber: rowNum, errors: v.errors });
+      }
+      if (validRows.length === 0) { showToast('No students found in PDF. Please check the format.', 'error'); setFileName(''); return; }
+      setParsedData(validRows);
+      setValidationErrors(invalidRows);
+    } catch (err) {
+      showToast('Failed to read PDF: ' + err.message, 'error');
+      setFileName('');
+    }
+  };
+
+  const handleFileSelected = (file) => {
+    if (!file) return;
+    if (file.name.endsWith('.pdf')) processPDFFile(file);
+    else if (file.type === 'text/csv' || file.name.endsWith('.csv')) processFile(file);
+    else showToast('Please upload a .csv or .pdf file', 'error');
+  };
+
   const handleDrop = (e) => {
     e.preventDefault(); setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && (file.type === 'text/csv' || file.name.endsWith('.csv'))) processFile(file);
-    else showToast('Please upload a valid .csv file', 'error');
+    handleFileSelected(e.dataTransfer.files[0]);
   };
 
   const [popiaConsent, setPopiaConsent] = useState(false);
@@ -743,8 +795,8 @@ const DataImportModule = ({ onBack, user, showToast }) => {
             <Button onClick={() => document.getElementById('file-upload').click()} variant="primary">
               <FileSpreadsheet size={18}/> Browse Files
             </Button>
-            <input id="file-upload" type="file" accept=".csv" className="hidden"
-              onChange={(e) => { if (e.target.files[0]) processFile(e.target.files[0]); }} />
+            <input id="file-upload" type="file" accept=".csv,.pdf" className="hidden"
+              onChange={(e) => { handleFileSelected(e.target.files[0]); }} />
           </div>
         </Card>
       )}
