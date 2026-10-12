@@ -3003,9 +3003,9 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   };
 
   const openHistorySession = (item) => {
-    // Always open with no filters so all previously-scored students load regardless
-    // of what filter values are currently in the new-session form
-    const filters = { ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: item.name, unit: item.unit };
+    // Use the current filter UI values so the same roster loads as the original session.
+    // Staff should set Age/Gender filters before clicking a history item.
+    const filters = { ...trialFilters, customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
     onSelectActivity({ isTrial: true, trialData: t, filters, isHistory: true, refreshHistoryCallback: fetchHistory });
   };
@@ -3244,9 +3244,12 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
               {/* Recent activities from this session */}
               {trialHistory.length > 0 && (
                 <Card className="!p-0 overflow-hidden">
-                  <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2"><Clock size={15} className="text-purple-500"/> Continue a Previous Activity</h3>
-                    <span className="text-xs text-slate-400">{trialHistory.length} recorded</span>
+                  <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2"><Clock size={15} className="text-purple-500"/> Continue a Previous Activity</h3>
+                      <span className="text-xs text-slate-400">{trialHistory.length} recorded</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">Set the age/gender filters above first, then click an activity to reload that roster with saved results.</p>
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-700">
                     {trialHistory.map((item, idx) => (
@@ -3404,19 +3407,20 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           if (classList.length > 0) filtered = filtered.filter(s => classList.some(c => (s.class||'').toLowerCase().startsWith(c)));
         }
         if (activity.isHistory) {
-          // History mode: only show students who have saved results — ignore the
-          // filtered roster so we don't bleed in students from other age groups
+          // History mode: show the full filtered roster (same as a fresh session)
+          // but pre-fill scores from saved results. Any scored student not in the
+          // current filter is appended as an extra so nothing already saved is lost.
           const { data: existing } = await supabase.from('trial_results').select('*, students(*)').eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName);
           if (existing && existing.length > 0) {
             const loaded = {};
-            const historyRoster = [];
+            const extras = [];
             existing.forEach(tr => {
               const sd = Array.isArray(tr.students) ? tr.students[0] : (tr.students || null);
-              if (sd) { loaded[sd.id] = tr.result_value; historyRoster.push(sd); }
+              if (sd) { loaded[sd.id] = tr.result_value; if (!filtered.some(s => s.id === sd.id)) extras.push(sd); }
             });
-            setStudentRoster(historyRoster);
+            setStudentRoster([...filtered, ...extras]);
             if (!isRefresh) setScores(loaded);
-          } else setStudentRoster([]);
+          } else setStudentRoster(filtered);
         } else setStudentRoster(filtered);
 
       } else {
