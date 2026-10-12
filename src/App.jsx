@@ -1928,6 +1928,10 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
   const [deleteStudentModal, setDeleteStudentModal] = useState({ isOpen: false, id: null, name: '' });
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const emptyStudentForm = { first_name: '', last_name: '', age_group: 'U12', gender: 'Boys', house: '', class: '' };
+  const [addStudentModal, setAddStudentModal] = useState(false);
+  const [addStudentForm, setAddStudentForm]   = useState(emptyStudentForm);
+  const [addStudentSaving, setAddStudentSaving] = useState(false);
 
   // Staff state
   const [staffList, setStaffList]     = useState([]);
@@ -2068,6 +2072,28 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
     fetchStaff();
   };
 
+  const handleAddStudent = async () => {
+    const { first_name, last_name, age_group, gender, house, class: cls } = addStudentForm;
+    if (!first_name.trim() || !last_name.trim()) { showToast('First and last name are required', 'error'); return; }
+    if (!age_group) { showToast('Age group is required', 'error'); return; }
+    setAddStudentSaving(true);
+    const { data, error } = await supabase.from('students').insert({
+      school_id: user.school_id,
+      first_name: first_name.trim(),
+      last_name:  last_name.trim(),
+      age_group,
+      gender,
+      house:  house.trim() || 'Unassigned',
+      class:  cls.trim(),
+    }).select().single();
+    setAddStudentSaving(false);
+    if (error) { showToast('Failed to add student: ' + error.message, 'error'); return; }
+    setStudents(prev => [...prev, data]);
+    setAddStudentModal(false);
+    setAddStudentForm(emptyStudentForm);
+    showToast(`${first_name} ${last_name} added`);
+  };
+
   const handleRemoveStaff = async () => {
     const { id: staffId, name } = removeModal;
     setRemoveModal({ isOpen: false, id: null, name: '' });
@@ -2084,6 +2110,62 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
       <ConfirmModal isOpen={removeModal.isOpen} title="Remove Staff Member" message={`Remove ${removeModal.name} from your school?\n\nNote: their login account remains active in the system — only their school access is revoked. Contact your Supabase admin to fully delete the account if needed.`} confirmText="Remove" onConfirm={handleRemoveStaff} onCancel={() => setRemoveModal({ isOpen: false, id: null, name: '' })}/>
       <ConfirmModal isOpen={deleteStudentModal.isOpen} title="Remove Student" message={`Permanently remove ${deleteStudentModal.name} from the directory?\n\nThis will also delete all their event results and trial results. This action cannot be undone.`} confirmText="Remove" onConfirm={handleDeleteStudent} onCancel={() => setDeleteStudentModal({ isOpen: false, id: null, name: '' })}/>
       <ConfirmModal isOpen={bulkDeleteConfirm} title={`Remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''}?`} message={`This will permanently remove ${selectedStudentIds.size} student${selectedStudentIds.size !== 1 ? 's' : ''} from the directory, along with all their event results and trial results. This action cannot be undone.`} confirmText="Delete all" onConfirm={handleBulkDeleteStudents} onCancel={() => setBulkDeleteConfirm(false)}/>
+
+      {/* ── ADD STUDENT MODAL ── */}
+      {addStudentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 dark:text-white">Add Student</h3>
+              <button onClick={() => setAddStudentModal(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><X size={18}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">First Name <span className="text-red-400">*</span></label>
+                  <input value={addStudentForm.first_name} onChange={e => setAddStudentForm(f => ({ ...f, first_name: e.target.value }))} placeholder="e.g. James" className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Last Name <span className="text-red-400">*</span></label>
+                  <input value={addStudentForm.last_name} onChange={e => setAddStudentForm(f => ({ ...f, last_name: e.target.value }))} placeholder="e.g. Smith" className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Age Group</label>
+                  <select value={addStudentForm.age_group} onChange={e => setAddStudentForm(f => ({ ...f, age_group: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white">
+                    {['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Gender</label>
+                  <select value={addStudentForm.gender} onChange={e => setAddStudentForm(f => ({ ...f, gender: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white">
+                    <option value="Boys">Boys</option>
+                    <option value="Girls">Girls</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">House</label>
+                  <input value={addStudentForm.house} onChange={e => setAddStudentForm(f => ({ ...f, house: e.target.value }))} placeholder="e.g. Protea" list="house-suggestions" className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                  <datalist id="house-suggestions">{Object.keys(houseColors).map(h => <option key={h} value={h}/>)}</datalist>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Class</label>
+                  <input value={addStudentForm.class} onChange={e => setAddStudentForm(f => ({ ...f, class: e.target.value }))} placeholder="e.g. 6.2" className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button onClick={() => setAddStudentModal(false)} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+              <Button onClick={handleAddStudent} disabled={addStudentSaving} variant="primary">
+                {addStudentSaving ? <Loader2 size={15} className="animate-spin"/> : <Plus size={15}/>} Add Student
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -2097,6 +2179,9 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
                 <input type="text" placeholder="Search names or class..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-sky-400"/>
               </div>
+              <button onClick={() => { setAddStudentForm(emptyStudentForm); setAddStudentModal(true); }} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-600 transition-colors whitespace-nowrap">
+                <Plus size={15}/> Add student
+              </button>
               {onNavigateToImport && (
                 <button onClick={onNavigateToImport} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-600 transition-colors whitespace-nowrap">
                   <UploadCloud size={15}/> Import
@@ -3307,13 +3392,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       if (isTrial) {
         let query = supabase.from('students').select('*').eq('school_id', user.school_id);
         if (activity.filters.ageGroup !== 'All') query = query.eq('age_group', (activity.filters.ageGroup||'').replace(' (Open)','').trim());
-        if (activity.filters.house   !== 'All') query = query.ilike('house', `%${activity.filters.house.trim()}%`);
+        if (activity.filters.house   !== 'All') query = query.eq('house', activity.filters.house.trim());
         if (activity.filters.gender  !== 'All') query = query.eq('gender', activity.filters.gender);
         const { data: students } = await query;
         let filtered = students || [];
         if (activity.filters.className.trim() !== '') {
           const classList = activity.filters.className.split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
-          if (classList.length > 0) filtered = filtered.filter(s => classList.some(c => (s.class||'').toLowerCase().includes(c)));
+          // startsWith: "6" matches "6.1","6.2","6A" but not "16"; "6.2" matches only "6.2"
+          if (classList.length > 0) filtered = filtered.filter(s => classList.some(c => (s.class||'').toLowerCase().startsWith(c)));
         }
         if (activity.isHistory) {
           const { data: existing } = await supabase.from('trial_results').select('*, students(*)').eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName);
