@@ -2981,14 +2981,21 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const fetchHistory = useCallback(async () => {
     if (!selectedTrialId) return;
     try {
-      const { data, error } = await supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId);
-      if (error) return;
+      const [{ data: results }, { data: sessions }] = await Promise.all([
+        supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId),
+        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json').eq('trial_id', selectedTrialId),
+      ]);
+      const sessionMap = {};
+      (sessions || []).forEach(s => { sessionMap[s.activity_name] = s.filters_json; });
       const actMap = {};
-      (data || []).forEach(tr => {
+      (results || []).forEach(tr => {
         if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, count: 0 };
         actMap[tr.activity_name].count++;
       });
-      setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({ name, unit, count })));
+      setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({
+        name, unit, count,
+        savedFilters: sessionMap[name] || null,
+      })));
     } catch (e) { console.error('History fetch error', e); }
   }, [selectedTrialId]);
 
@@ -3003,9 +3010,13 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   };
 
   const openHistorySession = (item) => {
-    // Use the current filter UI values so the same roster loads as the original session.
-    // Staff should set Age/Gender filters before clicking a history item.
-    const filters = { ...trialFilters, customActivityName: item.name, unit: item.unit };
+    // Use filters saved to DB when this activity was last saved — so the exact
+    // same roster loads automatically. Falls back to current UI filters if
+    // this activity predates the schema change.
+    const restoredFilters = item.savedFilters
+      ? { ageGroup: item.savedFilters.ageGroup || 'All', gender: item.savedFilters.gender || 'All', house: item.savedFilters.house || 'All', className: item.savedFilters.className || '' }
+      : { ageGroup: trialFilters.ageGroup, gender: trialFilters.gender, house: trialFilters.house, className: trialFilters.className };
+    const filters = { ...restoredFilters, customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
     onSelectActivity({ isTrial: true, trialData: t, filters, isHistory: true, refreshHistoryCallback: fetchHistory });
   };
@@ -3249,7 +3260,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                       <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2"><Clock size={15} className="text-purple-500"/> Continue a Previous Activity</h3>
                       <span className="text-xs text-slate-400">{trialHistory.length} recorded</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">Set the age/gender filters above first, then click an activity to reload that roster with saved results.</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click an activity to reload the same roster with saved results.</p>
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-700">
                     {trialHistory.map((item, idx) => (
@@ -3682,6 +3693,14 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         const rows = withScores.map(sid => ({ trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit }));
         const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
         if (trialErr) throw trialErr;
+        // Persist the filters used so reopening this activity auto-restores the same roster
+        await supabase.from('trial_activity_sessions').upsert({
+          trial_id:      activity.trialData.id,
+          activity_name: activity.filters.customActivityName,
+          unit:          activity.filters.unit,
+          filters_json:  { ageGroup: activity.filters.ageGroup, gender: activity.filters.gender, house: activity.filters.house, className: activity.filters.className },
+          updated_at:    new Date().toISOString(),
+        }, { onConflict: 'trial_id, activity_name' });
         showToast(`Successfully saved ${rows.length} trial records!`);
       } else if (isPlacingMode) {
         const rows = withScores.map(sid => ({ event_activity_id: activity.id, student_id: sid, result_value: parseFloat(scores[sid]), recorded_by: user.id, is_new_record: false }));
