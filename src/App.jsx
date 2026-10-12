@@ -4498,9 +4498,23 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                     {isTrial && <SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/>}
                     <SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/>
                     {!isTrial && <th className="px-4 py-3 font-semibold text-center text-slate-400 text-xs">Trial Score</th>}
-                    <th className={`px-4 py-3 font-semibold text-right ${isTrial && tScoringMode !== 'standard' ? 'min-w-[320px]' : 'w-48'}`}>
-                      {isTrial && tScoringMode === 'best_of_n' ? `Attempts (best of ${tNumAttempts}) — ${unitLabel}` : isTrial && tScoringMode === 'heights' ? `Heights (✓ cleared / ✗ failed / — skip)` : `Result (${unitLabel})`}
-                    </th>
+                    {isTrial && tScoringMode === 'best_of_n' ? (
+                      <>
+                        {Array.from({length: tNumAttempts}, (_, i) => (
+                          <th key={i} className="px-3 py-3 font-semibold text-center w-24 text-slate-600 dark:text-slate-300">A{i+1} <span className="text-slate-400 font-normal text-xs">({unitLabel})</span></th>
+                        ))}
+                        <th className="px-3 py-3 font-semibold text-center w-24 text-emerald-600 dark:text-emerald-400">Best</th>
+                      </>
+                    ) : isTrial && tScoringMode === 'heights' ? (
+                      <>
+                        {tHeights.map(h => (
+                          <th key={h} className="px-3 py-3 font-semibold text-center w-20 text-slate-600 dark:text-slate-300 font-mono">{h}m</th>
+                        ))}
+                        <th className="px-3 py-3 font-semibold text-center w-24 text-emerald-600 dark:text-emerald-400">Best</th>
+                      </>
+                    ) : (
+                      <th className="px-4 py-3 font-semibold w-48 text-right">Result ({unitLabel})</th>
+                    )}
                     {!isTrial && <th className="px-4 py-3 w-12"></th>}
                   </tr>
                 </thead>
@@ -4537,19 +4551,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                 {isTrial && <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{student.age_group}</td>}
                                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
                                 {!isTrial && <td className="px-4 py-3 text-center text-slate-400 font-mono text-xs">{student.best_trial_score ?? '--'}</td>}
-                                <td className="px-4 py-3 text-right">
-                                  {isTrial && tScoringMode === 'best_of_n' ? (() => {
+                                {isTrial && tScoringMode === 'best_of_n' ? (() => {
                                     const atts = trialAttempts[student.id] || {};
                                     const vals = Array.from({length: tNumAttempts}, (_, i) => parseFloat(atts[i+1])).filter(v => !isNaN(v) && v >= 0);
                                     const best = vals.length > 0 ? Math.max(...vals) : null;
                                     return (
-                                      <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                                      <>
                                         {Array.from({length: tNumAttempts}, (_, i) => {
                                           const v = atts[i+1] !== undefined ? String(atts[i+1]) : '';
                                           const isBest = best !== null && parseFloat(v) === best && v !== '';
                                           return (
-                                            <div key={i} className="flex flex-col items-center gap-0.5">
-                                              <span className="text-[10px] text-slate-400">A{i+1}</span>
+                                            <td key={i} className="px-3 py-3 text-center">
                                               <input type="number" step="0.01" value={v} placeholder="—"
                                                 onChange={e => {
                                                   const updated = { ...atts, [i+1]: e.target.value };
@@ -4559,46 +4571,52 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                                   setScores(prev => newBest !== null ? { ...prev, [student.id]: newBest } : (({ [student.id]: _, ...rest }) => rest)(prev));
                                                   setIsDirty(true);
                                                 }}
-                                                className={`w-20 px-2 py-2 border rounded-lg text-right font-mono text-sm outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBest ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-300 font-bold text-emerald-700' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white'}`}
+                                                className={`w-20 px-2 py-2 border rounded-lg text-center font-mono text-sm outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBest ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 ring-2 ring-emerald-300 font-bold text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white'}`}
                                               />
-                                            </div>
+                                            </td>
                                           );
                                         })}
-                                        {best !== null && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 ml-1 whitespace-nowrap">Best: {best} {unitLabel}</span>}
-                                      </div>
+                                        <td className="px-3 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                          {best !== null ? best : <span className="text-slate-300 font-normal">—</span>}
+                                        </td>
+                                      </>
                                     );
                                   })() : isTrial && tScoringMode === 'heights' ? (() => {
                                     const hr = heightResults[student.id] || {};
                                     const cleared = tHeights.filter(h => hr[h] === 'o');
                                     const highest = cleared.length > 0 ? Math.max(...cleared.map(parseFloat)) : null;
                                     return (
-                                      <div className="flex flex-col gap-1 items-end">
+                                      <>
                                         {tHeights.map(h => {
                                           const status = hr[h] || '-';
                                           return (
-                                            <div key={h} className="flex items-center gap-1.5">
-                                              <span className="text-xs text-slate-500 w-12 text-right font-mono">{h}m</span>
-                                              {['o','x','-'].map(btn => (
-                                                <button key={btn} onClick={() => {
-                                                  const updated = { ...hr, [h]: btn };
-                                                  setHeightResults(prev => ({ ...prev, [student.id]: updated }));
-                                                  const cls = tHeights.filter(ht => updated[ht] === 'o');
-                                                  const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
-                                                  setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
-                                                  setIsDirty(true);
-                                                }}
-                                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white' : btn === 'x' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
-                                                  {btn === 'o' ? '✓' : btn === 'x' ? '✗' : '—'}
-                                                </button>
-                                              ))}
-                                            </div>
+                                            <td key={h} className="px-3 py-3 text-center">
+                                              <div className="flex gap-1 justify-center">
+                                                {['o','x','-'].map(btn => (
+                                                  <button key={btn} onClick={() => {
+                                                    const updated = { ...hr, [h]: btn };
+                                                    setHeightResults(prev => ({ ...prev, [student.id]: updated }));
+                                                    const cls = tHeights.filter(ht => updated[ht] === 'o');
+                                                    const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
+                                                    setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                                    setIsDirty(true);
+                                                  }}
+                                                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-colors touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white shadow-sm' : btn === 'x' ? 'bg-red-500 text-white shadow-sm' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                    {btn === 'o' ? '✓' : btn === 'x' ? '✗' : '—'}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </td>
                                           );
                                         })}
-                                        {tHeights.length === 0 && <span className="text-xs text-slate-400 italic">No heights set</span>}
-                                        {highest !== null && <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">Cleared: {highest}m</span>}
-                                      </div>
+                                        <td className="px-3 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                                          {highest !== null ? `${highest}m` : <span className="text-slate-300 font-normal">—</span>}
+                                        </td>
+                                      </>
                                     );
-                                  })() : isPlacingMode || positionOverrides[student.id] !== undefined ? (
+                                  })() : null}
+                                {(!isTrial || tScoringMode === 'standard') && <td className="px-4 py-3 text-right">
+                                  {isPlacingMode || positionOverrides[student.id] !== undefined ? (
                                     <div className="flex flex-col items-end gap-1">
                                       <div className="flex gap-1.5 flex-wrap justify-end">
                                         {['1st','2nd','3rd','4th','5th','6th'].map((label, idx) => {
@@ -4644,7 +4662,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                       )}
                                     </div>
                                   )}
-                                </td>
+                                </td>}
                                 {!isTrial && (
                                   <td className="px-4 py-3">
                                     <button onClick={() => setModalConfig({ isOpen: true, type: 'kick', payload: student.id })} title="Mark DNS/DNF/DQ" className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/row:opacity-100">
