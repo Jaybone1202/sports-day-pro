@@ -701,16 +701,98 @@ const DataImportModule = ({ onBack, user, showToast }) => {
     }
   };
 
-  const handleFileSelected = (file) => {
-    if (!file) return;
-    if (file.name.endsWith('.pdf')) processPDFFile(file);
-    else if (file.type === 'text/csv' || file.name.endsWith('.csv')) processFile(file);
-    else showToast('Please upload a .csv or .pdf file', 'error');
+  const handleFilesSelected = async (files) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files);
+    const invalid = fileList.find(f => !f.name.endsWith('.pdf') && !f.name.endsWith('.csv') && f.type !== 'text/csv');
+    if (invalid) { showToast('Only .csv and .pdf files are supported', 'error'); return; }
+
+    if (fileList.length === 1) {
+      const f = fileList[0];
+      if (f.name.endsWith('.pdf')) processPDFFile(f);
+      else processFile(f);
+      return;
+    }
+
+    // Multiple files — process all and accumulate
+    setFileName(`${fileList.length} files selected`);
+    const allValid = [], allInvalid = [];
+    for (const f of fileList) {
+      await new Promise((resolve) => {
+        if (f.name.endsWith('.pdf')) {
+          // processPDFFile sets state directly; adapt it inline
+          f.arrayBuffer().then(async (buf) => {
+            try {
+              const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+              let fullText = '';
+              for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                fullText += content.items.map(it => it.str).join(' ') + '\n';
+              }
+              let derivedClass = f.name.replace(/\.pdf$/i, '');
+              const hm = fullText.match(/Grade\s+(\d+)\s+(\d+)/i);
+              if (hm) derivedClass = `${hm[1]}.${hm[2]}`;
+              const rowRegex = /\b\d+\s+([A-Z][A-Z\-\s]+?)\s+([A-Z][a-z][\w\-\s]*?)\s+(\d{4}-\d{2}-\d{2})\s+(U\/?\d+)\s+([MF])\s+([A-Za-z]+)/g;
+              let match, rowNum = allValid.length + allInvalid.length;
+              while ((match = rowRegex.exec(fullText)) !== null) {
+                rowNum++;
+                const [, rawSurname, rawFirst, , rawAge, rawGender, rawHouse] = match;
+                const rowObj = { firstName: rawFirst.trim(), lastName: rawSurname.trim().replace(/\s+/g, '-'), ageGroup: rawAge.toUpperCase().replace(/[\/\s\-]/g, ''), gender: rawGender === 'M' ? 'Boys' : 'Girls', house: rawHouse.trim(), class: derivedClass };
+                const v = validateStudent(rowObj);
+                if (v.success) allValid.push(v.data); else allInvalid.push({ rowNumber: rowNum, errors: v.errors });
+              }
+            } catch (e) { showToast(`Failed to read ${f.name}: ${e.message}`, 'error'); }
+            resolve();
+          });
+        } else {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const text = e.target.result;
+            const lines = text.split(/\r\n|\n/).filter(l => l.trim() !== '');
+            const sep = lines[0].includes(';') ? ';' : lines[0].includes('\t') ? '\t' : ',';
+            const rawHeaders = parseCSVRow(lines[0], sep);
+            const mappedHeaders = rawHeaders.map(h => {
+              const n = h.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+              if (['firstname','first','name','givenname'].includes(n)) return 'firstName';
+              if (['lastname','last','surname','familyname'].includes(n)) return 'lastName';
+              if (['agegroup','age','group','division','u'].includes(n)) return 'ageGroup';
+              if (['class','grade','form','room','homeroom'].includes(n)) return 'class';
+              if (['house','team','color','colour'].includes(n)) return 'house';
+              if (['gender','sex','mf','boygirl'].includes(n)) return 'gender';
+              return h;
+            });
+            for (let i = 1; i < lines.length; i++) {
+              const values = parseCSVRow(lines[i], sep);
+              const rowObj = {};
+              mappedHeaders.forEach((h, idx) => { rowObj[h] = values[idx] || ''; });
+              let age = (rowObj.ageGroup || '').toString().trim().toUpperCase().replace(/[\s/\\-]/g, '');
+              if (/^\d+$/.test(age)) age = `U${age}`;
+              rowObj.ageGroup = age;
+              if (rowObj.gender) {
+                const g = rowObj.gender.trim().toLowerCase();
+                if (['boy','boys','m','male'].includes(g)) rowObj.gender = 'Boys';
+                else if (['girl','girls','f','female'].includes(g)) rowObj.gender = 'Girls';
+                else rowObj.gender = 'Mixed';
+              }
+              const v = validateStudent(rowObj);
+              if (v.success) allValid.push(v.data); else allInvalid.push({ rowNumber: allValid.length + allInvalid.length, errors: v.errors });
+            }
+            resolve();
+          };
+          reader.onerror = () => { showToast(`Failed to read ${f.name}`, 'error'); resolve(); };
+          reader.readAsText(f);
+        }
+      });
+    }
+    if (allValid.length === 0) { showToast('No valid students found across all files', 'error'); setFileName(''); return; }
+    setParsedData(allValid);
+    setValidationErrors(allInvalid);
   };
 
   const handleDrop = (e) => {
     e.preventDefault(); setIsDragging(false);
-    handleFileSelected(e.dataTransfer.files[0]);
+    handleFilesSelected(e.dataTransfer.files);
   };
 
   const [popiaConsent, setPopiaConsent] = useState(false);
@@ -756,7 +838,7 @@ const DataImportModule = ({ onBack, user, showToast }) => {
           <Button onClick={onBack} variant="secondary" className="!px-3 !py-2"><ArrowLeft size={18}/></Button>
           <div>
             <h2 className="text-xl font-bold text-slate-900">Import Class Lists</h2>
-            <p className="text-sm text-slate-500">Upload a CSV file containing student data.</p>
+            <p className="text-sm text-slate-500">Upload CSV or PDF class lists — select multiple files at once.</p>
           </div>
         </div>
         <button
@@ -795,8 +877,8 @@ const DataImportModule = ({ onBack, user, showToast }) => {
             <Button onClick={() => document.getElementById('file-upload').click()} variant="primary">
               <FileSpreadsheet size={18}/> Browse Files
             </Button>
-            <input id="file-upload" type="file" accept=".csv,.pdf" className="hidden"
-              onChange={(e) => { handleFileSelected(e.target.files[0]); }} />
+            <input id="file-upload" type="file" accept=".csv,.pdf" multiple className="hidden"
+              onChange={(e) => { handleFilesSelected(e.target.files); }} />
           </div>
         </Card>
       )}
@@ -1836,7 +1918,7 @@ const TrialSetupModule = ({ onBack, user, showToast, embedded }) => {
 // FIX: Added showToast prop so DB errors surface to the user
 // ==========================================
 
-const StudentDirectoryModule = ({ user, showToast }) => {
+const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
   const [tab, setTab]                 = useState('students');
   const [students, setStudents]       = useState([]);
   const [houseColors, setHouseColors] = useState({});
@@ -2010,9 +2092,16 @@ const StudentDirectoryModule = ({ user, showToast }) => {
             <p className="text-slate-500 dark:text-slate-400 text-sm">Manage students and staff accounts</p>
           </div>
           {tab === 'students' && (
-            <div className="relative w-full md:w-64 pb-4">
-              <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
-              <input type="text" placeholder="Search names or class..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-sky-400"/>
+            <div className="flex items-center gap-2 pb-4">
+              <div className="relative w-full md:w-64">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={18}/>
+                <input type="text" placeholder="Search names or class..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-sky-400"/>
+              </div>
+              {onNavigateToImport && (
+                <button onClick={onNavigateToImport} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-600 hover:bg-sky-50 hover:border-sky-300 hover:text-sky-600 transition-colors whitespace-nowrap">
+                  <UploadCloud size={15}/> Import
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -2560,7 +2649,7 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   if (currentView === 'import')    return <PageTransition keyProp="import"><DataImportModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'planning')  return <PageTransition keyProp="planning"><PlanningModule user={user} showToast={showToast} defaultTab="events"/></PageTransition>;
   if (currentView === 'trials')    return <PageTransition keyProp="trials"><OrganiserTrialsModule user={user} showToast={showToast}/></PageTransition>;
-  if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast}/></PageTransition>;
+  if (currentView === 'students')  return <PageTransition keyProp="students"><StudentDirectoryModule user={user} showToast={showToast} onNavigateToImport={() => setCurrentView('import')}/></PageTransition>;
   if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'records')   return <PageTransition keyProp="records"><RecordBoardModule user={user} showToast={showToast}/></PageTransition>;
