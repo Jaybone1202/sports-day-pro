@@ -2959,7 +2959,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       } catch (e) { console.error(e); showToast('Failed to load activities', 'error'); } finally { setIsLoading(false); }
     };
     fetchActivities();
-  }, [selectedEventId, mode, refreshResultCounts]);
+  }, [selectedEventId, mode, refreshResultCounts, allEvents]);
 
   // Refresh result counts when returning from scoring view
   useEffect(() => {
