@@ -3721,7 +3721,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
     if (sortConfig.secondaryKey) {
       const sA = (a[sortConfig.secondaryKey]||'').toString().toLowerCase();
       const sB = (b[sortConfig.secondaryKey]||'').toString().toLowerCase();
-      if (sA < sB) return 1; if (sA > sB) return -1;
+      if (sA < sB) return -1; if (sA > sB) return 1;
     }
     return 0;
   });
