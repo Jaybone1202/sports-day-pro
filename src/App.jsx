@@ -3454,6 +3454,21 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [heightResults, setHeightResults]   = useState({}); // { sid: { '1.00': 'o'|'x'|'-' } }
   const [jumpOffScores, setJumpOffScores]   = useState({}); // { sid: value } for heights jump-off
 
+  // localStorage backup key for trial sessions
+  const trialBackupKey = isTrial
+    ? `sdp-trial-backup-${activity.trialData?.id}-${activity.filters?.customActivityName}`
+    : null;
+
+  // Write trial state to localStorage whenever it changes (safety net against refresh)
+  useEffect(() => {
+    if (!isTrial || !trialBackupKey) return;
+    try {
+      localStorage.setItem(trialBackupKey, JSON.stringify({
+        scores, trialAttempts, heightResults, jumpOffScores, savedAt: Date.now(),
+      }));
+    } catch (e) {}
+  }, [scores, trialAttempts, heightResults, jumpOffScores, isTrial, trialBackupKey]);
+
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
   const [currentAttemptNum, setCurrentAttemptNum] = useState(1);
@@ -3517,6 +3532,27 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             }
           } else setStudentRoster(filtered);
         } else setStudentRoster(filtered);
+
+        // Restore unsaved trial data from localStorage backup (protects against accidental refresh)
+        if (!isRefresh) {
+          try {
+            const raw = localStorage.getItem(trialBackupKey);
+            if (raw) {
+              const backup = JSON.parse(raw);
+              const hasUnsaved = Object.keys(backup.scores || {}).some(k => backup.scores[k] != null && backup.scores[k] !== '')
+                || Object.keys(backup.trialAttempts || {}).length > 0
+                || Object.keys(backup.heightResults || {}).length > 0;
+              if (hasUnsaved) {
+                setScores(prev => ({ ...prev, ...backup.scores }));
+                if (backup.trialAttempts) setTrialAttempts(backup.trialAttempts);
+                if (backup.heightResults) setHeightResults(backup.heightResults);
+                if (backup.jumpOffScores) setJumpOffScores(backup.jumpOffScores);
+                setIsDirty(true);
+                showToast('Restored unsaved trial data from local backup', 'warning');
+              }
+            }
+          } catch (e) {}
+        }
 
       } else {
         const { data: absentees } = await supabase.from('event_absences').select('student_id, absence_status').eq('event_activity_id', activity.id);
@@ -3767,23 +3803,26 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       : [];
     const positionIds = new Set(positionRows.map(r => r.id));
     const withScores = Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '' && !positionIds.has(id));
-    if (withScores.length === 0 && positionRows.length === 0) { showToast('No scores entered.', 'error'); return; }
+    // Trials: allow saving with 0 scores (bookmarks session so it can be reopened safely)
+    if (!isTrial && withScores.length === 0 && positionRows.length === 0) { showToast('No scores entered.', 'error'); return; }
     const invalid = withScores.filter(id => !isValidScore(scores[id]));
     if (invalid.length > 0) { showToast('One or more scores are invalid. Check for negative or non-numeric values.', 'error'); return; }
     setIsSaving(true);
     try {
       if (isTrial) {
         const tScoringMode = activity.filters.scoringMode || 'standard';
-        await supabase.from('trial_results').delete().eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName).in('student_id', withScores);
-        const rows = withScores.map(sid => {
-          let attJson = null;
-          if (tScoringMode === 'best_of_n') attJson = trialAttempts[sid] || null;
-          else if (tScoringMode === 'heights') attJson = heightResults[sid] || null;
-          return { trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit, attempts_json: attJson };
-        });
-        const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
-        if (trialErr) throw trialErr;
-        // Persist the filters + scoring config so reopening this activity auto-restores exactly
+        if (withScores.length > 0) {
+          await supabase.from('trial_results').delete().eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName).in('student_id', withScores);
+          const rows = withScores.map(sid => {
+            let attJson = null;
+            if (tScoringMode === 'best_of_n') attJson = trialAttempts[sid] || null;
+            else if (tScoringMode === 'heights') attJson = heightResults[sid] || null;
+            return { trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit, attempts_json: attJson };
+          });
+          const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
+          if (trialErr) throw trialErr;
+        }
+        // Always persist session metadata (filters + scoring config) — even with 0 scores
         await supabase.from('trial_activity_sessions').upsert({
           trial_id:      activity.trialData.id,
           activity_name: activity.filters.customActivityName,
@@ -3794,7 +3833,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           heights_json:  activity.filters.heights || null,
           updated_at:    new Date().toISOString(),
         }, { onConflict: 'trial_id, activity_name' });
-        showToast(`Successfully saved ${rows.length} trial records!`);
+        // Clear localStorage backup — data is now safely in DB
+        try { if (trialBackupKey) localStorage.removeItem(trialBackupKey); } catch (e) {}
+        showToast(withScores.length > 0 ? `Saved ${withScores.length} trial records!` : 'Session bookmarked — no scores yet');
       } else if (isPlacingMode) {
         const rows = withScores.map(sid => ({ event_activity_id: activity.id, student_id: sid, result_value: parseFloat(scores[sid]), recorded_by: user.id, is_new_record: false }));
         await supabase.from('event_results').upsert(rows, { onConflict: 'event_activity_id,student_id' });
@@ -3969,6 +4010,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   };
   const confirmClose = () => {
     setShowUnsavedWarning(false);
+    // Discard backup when user explicitly chooses to close without saving
+    try { if (trialBackupKey) localStorage.removeItem(trialBackupKey); } catch (e) {}
     if (isTrial && activity.refreshHistoryCallback) activity.refreshHistoryCallback();
     onClose();
   };
