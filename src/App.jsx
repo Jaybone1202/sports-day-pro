@@ -6055,14 +6055,10 @@ const LoginView = ({ onLogin, onNavigate }) => {
             </Button>
           </form>
           <div className="relative my-2"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"/></div><div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-slate-400 font-medium">OR</span></div></div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <button onClick={() => onNavigate('parent')}
               className="flex items-center justify-center gap-2 p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 font-semibold text-sm transition-colors border border-slate-200">
               <Smartphone size={16}/> Parent Portal
-            </button>
-            <button onClick={() => onNavigate('register')}
-              className="flex items-center justify-center gap-2 p-3 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-600 font-semibold text-sm transition-colors border border-sky-100">
-              <Plus size={16}/> Register School
             </button>
           </div>
           <p className="text-center text-xs text-slate-400 pt-2">
