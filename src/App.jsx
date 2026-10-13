@@ -53,6 +53,7 @@ import {
   FlagOff,
   Hash,
   Download,
+  AlertTriangle,
 } from 'lucide-react';
 
 // ==========================================
@@ -3398,6 +3399,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const [showUnsavedHeatModal, setShowUnsavedHeatModal] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState(null);
   const [savedStudentIds, setSavedStudentIds] = useState(new Set());
+  const [saveError, setSaveError] = useState(null); // persistent save-failure message
 
   // Per-student position override for track activities where a time isn't available
   const [positionOverrides, setPositionOverrides] = useState({});
@@ -3468,6 +3470,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       }));
     } catch (e) {}
   }, [scores, trialAttempts, heightResults, jumpOffScores, isTrial, trialBackupKey]);
+
+  // Warn before browser close/refresh if there are unsaved changes
+  useEffect(() => {
+    const handler = (e) => {
+      if (!isDirty && !saveError) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty, saveError]);
 
   // Multi-attempt state (only used when activity.attemptsEnabled)
   const [attempts, setAttempts]             = useState({});
@@ -3840,6 +3853,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         }, { onConflict: 'trial_id, activity_name' });
         // Clear localStorage backup — data is now safely in DB
         try { if (trialBackupKey) localStorage.removeItem(trialBackupKey); } catch (e) {}
+        setSaveError(null);
         showToast(withScores.length > 0 ? `Saved ${withScores.length} trial records!` : 'Session bookmarked — no scores yet');
       } else if (isPlacingMode) {
         const rows = withScores.map(sid => ({ event_activity_id: activity.id, student_id: sid, result_value: parseFloat(scores[sid]), recorded_by: user.id, is_new_record: false }));
@@ -3887,9 +3901,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           showToast(`Saved ${timeCount} time${timeCount !== 1 ? 's' : ''}${posCount > 0 ? ` + ${posCount} position${posCount !== 1 ? 's' : ''}` : ''}.`);
         }
       }
-    } catch (err) { console.error(err); showToast(navigator.onLine === false ? 'No connection — scores not saved. Try again when back online.' : 'Failed to save results. Please try again.', 'error'); return; } finally { setIsSaving(false); }
+    } catch (err) { console.error(err); setSaveError(navigator.onLine === false ? 'No internet connection — scores NOT saved. Reconnect and tap Save again.' : 'Save failed (server error) — scores NOT saved. Please tap Save again.'); return; } finally { setIsSaving(false); }
 
     try { localStorage.removeItem(`sdp-score-backup-${activity.id}`); } catch (e) {}
+    setSaveError(null);
     setIsDirty(false);
     setLastSavedTime(new Date());
     setSavedStudentIds(prev => new Set([
@@ -4277,13 +4292,24 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           </div>
           <div className="flex flex-col items-end gap-1">
             {isLocked && <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1"><Lock size={11}/> Event locked by organiser</span>}
-            {lastSavedTime && !isDirty && <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 size={11}/> Saved {lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+            {lastSavedTime && !isDirty && !saveError && <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1"><CheckCircle2 size={11}/> Saved {lastSavedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
             <Button onClick={handleSaveResults} variant="primary" disabled={isSaving || isLoading || studentRoster.length === 0 || isLocked}>
               {isSaving ? <><Loader2 className="animate-spin" size={18}/> Saving...</> : <><Save size={18}/> Save{heatSize !== 'All' ? ` Heat ${activeHeat}` : ''}</>}
             </Button>
           </div>
         </div>
       </div>
+
+      {/* Persistent save-failure banner */}
+      {saveError && (
+        <div className="flex items-center gap-3 bg-red-50 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded-xl px-4 py-3">
+          <AlertTriangle size={20} className="text-red-600 dark:text-red-400 shrink-0"/>
+          <p className="flex-1 text-sm font-semibold text-red-700 dark:text-red-300">{saveError}</p>
+          <button onClick={handleSaveResults} disabled={isSaving} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded-lg transition-colors shrink-0">
+            {isSaving ? 'Retrying…' : 'Retry Save'}
+          </button>
+        </div>
+      )}
 
       {/* Heat navigation bar */}
       {heatSize !== 'All' && heatKeys.length > 1 && (
