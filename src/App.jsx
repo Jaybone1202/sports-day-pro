@@ -4562,7 +4562,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                           const isBest = best !== null && parseFloat(v) === best && v !== '';
                                           return (
                                             <td key={i} className="px-3 py-3 text-center">
-                                              <input type="number" step="0.01" value={v} placeholder="—"
+                                              <input id={`trial-att-${student.id}-${i+1}`} type="number" step="0.01" value={v} placeholder="—"
                                                 onChange={e => {
                                                   const updated = { ...atts, [i+1]: e.target.value };
                                                   setTrialAttempts(prev => ({ ...prev, [student.id]: updated }));
@@ -4570,6 +4570,15 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                                   const newBest = newVals.length > 0 ? Math.max(...newVals) : null;
                                                   setScores(prev => newBest !== null ? { ...prev, [student.id]: newBest } : (({ [student.id]: _, ...rest }) => rest)(prev));
                                                   setIsDirty(true);
+                                                }}
+                                                onKeyDown={e => {
+                                                  if (e.key !== 'Enter') return;
+                                                  e.preventDefault();
+                                                  // Move to next attempt in same student, or first attempt of next student
+                                                  const nextAttId = i + 1 < tNumAttempts
+                                                    ? `trial-att-${student.id}-${i+2}`
+                                                    : `trial-att-${nextId}-1`;
+                                                  document.getElementById(nextAttId)?.focus();
                                                 }}
                                                 className={`w-20 px-2 py-2 border rounded-lg text-center font-mono text-sm outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isBest ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 ring-2 ring-emerald-300 font-bold text-emerald-700 dark:text-emerald-300' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white'}`}
                                               />
@@ -4698,36 +4707,50 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         )}
       </Card>
 
-      {/* Heights mode: jump-off section */}
+      {/* Heights mode: jump-off section — always visible so staff can enter results any time */}
       {isTrial && tScoringMode === 'heights' && tHeights.length > 0 && (() => {
         const allHighests = studentRoster.map(s => {
           const hr = heightResults[s.id] || {};
           const cls = tHeights.filter(h => hr[h] === 'o');
           return { s, val: cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null };
         }).filter(x => x.val !== null);
-        if (allHighests.length < 2) return null;
-        const topVal = Math.max(...allHighests.map(x => x.val));
-        const tied = allHighests.filter(x => x.val === topVal);
-        if (tied.length < 2) return null;
+        const topVal = allHighests.length > 0 ? Math.max(...allHighests.map(x => x.val)) : null;
+        const tied = topVal !== null ? allHighests.filter(x => x.val === topVal) : [];
+        const isTied = tied.length >= 2;
+        // Show all students who cleared at least one height (or all if none scored yet)
+        const jumpCandidates = allHighests.length > 0 ? allHighests.map(x => x.s) : studentRoster;
         return (
-          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
-            <h4 className="font-bold text-amber-800 dark:text-amber-200 mb-1 flex items-center gap-2"><AlertCircle size={16}/> Jump-off — {tied.length} athletes tied at {topVal}m</h4>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">Enter each athlete's jump-off result. This overrides their main result for final ranking.</p>
+          <div className={`border rounded-xl p-4 ${isTied ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700' : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700'}`}>
+            <h4 className={`font-bold mb-1 flex items-center gap-2 ${isTied ? 'text-amber-800 dark:text-amber-200' : 'text-slate-700 dark:text-slate-300'}`}>
+              <AlertCircle size={16}/>
+              {isTied ? `Jump-off — ${tied.length} athletes tied at ${topVal}m` : 'Jump-off / Showdown'}
+            </h4>
+            <p className={`text-xs mb-3 ${isTied ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}`}>
+              {isTied ? 'Enter each tied athlete\'s jump-off result to break the tie. This overrides their main result.' : 'Enter jump-off results here if needed. Overrides the height result for final ranking.'}
+            </p>
             <div className="space-y-2">
-              {tied.map(({ s }) => (
+              {jumpCandidates.map(s => (
                 <div key={s.id} className="flex items-center gap-3">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-40 truncate">{s.last_name}, {s.first_name}</span>
-                  <input type="number" step="0.01" placeholder="Jump-off result"
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 w-44 truncate">{s.last_name}, {s.first_name}</span>
+                  {topVal !== null && <span className="text-xs text-slate-400 w-16">Main: {(heightResults[s.id] ? Math.max(...tHeights.filter(h => heightResults[s.id][h] === 'o').map(parseFloat)) || '—' : '—')}m</span>}
+                  <input type="number" step="0.01" placeholder="Jump-off (m)"
                     value={jumpOffScores[s.id] || ''}
                     onChange={e => {
                       setJumpOffScores(prev => ({ ...prev, [s.id]: e.target.value }));
-                      if (e.target.value && parseFloat(e.target.value) >= 0) {
-                        setScores(prev => ({ ...prev, [s.id]: parseFloat(e.target.value) }));
-                        setIsDirty(true);
+                      const v = parseFloat(e.target.value);
+                      if (!isNaN(v) && v >= 0) { setScores(prev => ({ ...prev, [s.id]: v })); setIsDirty(true); }
+                      else if (e.target.value === '') {
+                        // Restore to main height result
+                        const hr = heightResults[s.id] || {};
+                        const cls = tHeights.filter(h => hr[h] === 'o');
+                        const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
+                        setScores(prev => hi !== null ? { ...prev, [s.id]: hi } : (({ [s.id]: _, ...rest }) => rest)(prev));
                       }
                     }}
-                    className="w-36 px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-lg text-right font-mono text-sm outline-none focus:ring-2 focus:ring-amber-400 bg-white dark:bg-slate-700 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                    className={`w-36 px-3 py-2 border rounded-lg text-right font-mono text-sm outline-none focus:ring-2 bg-white dark:bg-slate-700 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${isTied ? 'border-amber-300 dark:border-amber-700 focus:ring-amber-400' : 'border-slate-300 dark:border-slate-600 focus:ring-purple-400'}`}
+                  />
                   <span className="text-xs text-slate-400">m</span>
+                  {jumpOffScores[s.id] && <span className="text-xs text-emerald-600 font-bold">✓ set</span>}
                 </div>
               ))}
             </div>
