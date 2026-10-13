@@ -3513,13 +3513,17 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             const extras = [];
             const attLoaded = {};
             const htLoaded = {};
+            const jumpOffLoaded = {};
             existing.forEach(tr => {
               const sd = Array.isArray(tr.students) ? tr.students[0] : (tr.students || null);
               if (sd) {
                 loaded[sd.id] = tr.result_value;
                 if (tr.attempts_json) {
                   if (tScoringMode === 'best_of_n') attLoaded[sd.id] = tr.attempts_json;
-                  else if (tScoringMode === 'heights') htLoaded[sd.id] = tr.attempts_json;
+                  else if (tScoringMode === 'heights') {
+                    htLoaded[sd.id] = tr.attempts_json.heights || tr.attempts_json;
+                    if (tr.attempts_json.jumpOff) jumpOffLoaded[sd.id] = String(tr.attempts_json.jumpOff);
+                  }
                 }
                 if (!filtered.some(s => s.id === sd.id)) extras.push(sd);
               }
@@ -3529,6 +3533,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
               setScores(loaded);
               setTrialAttempts(attLoaded);
               setHeightResults(htLoaded);
+              setJumpOffScores(jumpOffLoaded);
             }
           } else setStudentRoster(filtered);
         } else setStudentRoster(filtered);
@@ -3816,7 +3821,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           const rows = withScores.map(sid => {
             let attJson = null;
             if (tScoringMode === 'best_of_n') attJson = trialAttempts[sid] || null;
-            else if (tScoringMode === 'heights') attJson = heightResults[sid] || null;
+            else if (tScoringMode === 'heights') attJson = { heights: heightResults[sid] || {}, jumpOff: jumpOffScores[sid] || null };
             return { trial_id: activity.trialData.id, student_id: sid, activity_name: activity.filters.customActivityName, result_value: parseFloat(scores[sid]), unit: activity.filters.unit, attempts_json: attJson };
           });
           const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
@@ -4554,6 +4559,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                           <th key={h} className="px-3 py-3 font-semibold text-center w-20 text-slate-600 dark:text-slate-300 font-mono">{h}m</th>
                         ))}
                         <th className="px-3 py-3 font-semibold text-center w-24 text-emerald-600 dark:text-emerald-400">Best</th>
+                        <th className="px-3 py-3 font-semibold text-center w-28 text-amber-600 dark:text-amber-400">Jump-off</th>
                       </>
                     ) : (
                       <th className="px-4 py-3 font-semibold w-48 text-right">Result ({unitLabel})</th>
@@ -4663,6 +4669,21 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                         })}
                                         <td className="px-3 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                                           {highest !== null ? `${highest}m` : <span className="text-slate-300 font-normal">—</span>}
+                                        </td>
+                                        <td className="px-3 py-3 text-center">
+                                          <input type="number" step="0.01" placeholder="—"
+                                            value={jumpOffScores[student.id] || ''}
+                                            onChange={e => {
+                                              setJumpOffScores(prev => ({ ...prev, [student.id]: e.target.value }));
+                                              const v = parseFloat(e.target.value);
+                                              if (!isNaN(v) && v >= 0) { setScores(prev => ({ ...prev, [student.id]: v })); setIsDirty(true); }
+                                              else if (e.target.value === '') {
+                                                setScores(prev => highest !== null ? { ...prev, [student.id]: highest } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                                setIsDirty(true);
+                                              }
+                                            }}
+                                            className={`w-20 px-2 py-2 border rounded-lg text-center font-mono text-sm outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${jumpOffScores[student.id] ? 'border-amber-400 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-bold' : 'border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 dark:text-white'}`}
+                                          />
                                         </td>
                                       </>
                                     );
