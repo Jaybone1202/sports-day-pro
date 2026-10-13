@@ -3839,6 +3839,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           });
           const { error: trialErr } = await supabase.from('trial_results').upsert(rows, { onConflict: 'trial_id, student_id, activity_name' });
           if (trialErr) throw trialErr;
+          // Verify the write actually persisted (guards against silent failures during DB outages)
+          const { count: verifyCount } = await supabase.from('trial_results').select('*', { count: 'exact', head: true }).eq('trial_id', activity.trialData.id).eq('activity_name', activity.filters.customActivityName).in('student_id', withScores);
+          if (verifyCount === null || verifyCount < withScores.length) throw new Error(`Verification failed: expected ${withScores.length} rows, found ${verifyCount ?? 0}`);
         }
         // Always persist session metadata (filters + scoring config) — even with 0 scores
         await supabase.from('trial_activity_sessions').upsert({
@@ -3883,6 +3886,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
         // Save results first — only update the record if the save succeeds
         const { error: resultsErr } = await supabase.from('event_results').upsert(rows, { onConflict: 'event_activity_id,student_id' });
         if (resultsErr) throw resultsErr;
+        // Verify the write actually persisted (guards against silent failures during DB outages)
+        const { count: verifyCount } = await supabase.from('event_results').select('*', { count: 'exact', head: true }).eq('event_activity_id', activity.id).in('student_id', rows.map(r => r.student_id));
+        if (verifyCount === null || verifyCount < rows.length) throw new Error(`Verification failed: expected ${rows.length} rows, found ${verifyCount ?? 0}`);
 
         if (recordBrokenBy) {
           rows.forEach(r => { if (r.student_id === recordBrokenBy) r.is_new_record = true; });
