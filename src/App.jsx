@@ -297,8 +297,8 @@ const Card = ({ children, className = '' }) => (
   </div>
 );
 
-const SortableHeader = ({ label, sortKey, sortConfig, onSort }) => (
-  <th onClick={() => onSort(sortKey)} className="px-4 py-3 font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors select-none group">
+const SortableHeader = ({ label, sortKey, sortConfig, onSort, className = '' }) => (
+  <th onClick={() => onSort(sortKey)} className={`px-4 py-3 font-semibold cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors select-none group ${className}`}>
     <div className="flex items-center gap-1">{label}
       <div className="flex flex-col text-slate-300 group-hover:text-slate-500">
         <ChevronUp size={10} className={sortConfig?.key === sortKey && sortConfig?.direction === 'asc' ? 'text-sky-500' : ''}/>
@@ -4570,10 +4570,10 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             {/* ── DESKTOP table layout (hidden on mobile) ── */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600">
+                <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
                   <tr>
-                    {heatSize !== 'All' && <th className="px-4 py-3 font-semibold w-16 text-center">Heat</th>}
-                    <SortableHeader label="Student Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort}/>
+                    {heatSize !== 'All' && <th className="px-4 py-3 font-semibold w-16 text-center sticky left-0 bg-slate-100 dark:bg-slate-700/60 z-20">Heat</th>}
+                    <SortableHeader label="Student Name" sortKey="last_name" sortConfig={sortConfig} onSort={requestSort} className="sticky left-0 bg-slate-100 dark:bg-slate-700/60 z-20"/>
                     <SortableHeader label="Class" sortKey="class" sortConfig={sortConfig} onSort={requestSort}/>
                     {isTrial && <SortableHeader label="Age Group" sortKey="age_group" sortConfig={sortConfig} onSort={requestSort}/>}
                     <SortableHeader label="House" sortKey="house" sortConfig={sortConfig} onSort={requestSort}/>
@@ -4627,7 +4627,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                     </div>
                                   </td>
                                 )}
-                                <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{student.last_name}, {student.first_name}</td>
+                                <td className="px-4 py-3 font-medium text-slate-900 dark:text-white sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]">{student.last_name}, {student.first_name}</td>
                                 <td className="px-4 py-3 text-slate-700 dark:text-slate-300 font-medium">{student.class}</td>
                                 {isTrial && <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{student.age_group}</td>}
                                 <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
