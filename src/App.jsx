@@ -4568,7 +4568,7 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
             </div>
 
             {/* ── DESKTOP table layout (hidden on mobile) ── */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)]">
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
                   <tr>
