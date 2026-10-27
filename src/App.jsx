@@ -1932,6 +1932,8 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
   const emptyStudentForm = { first_name: '', last_name: '', age_group: 'U12', gender: 'Boys', house: '', class: '' };
   const [addStudentModal, setAddStudentModal] = useState(false);
   const [addStudentForm, setAddStudentForm]   = useState(emptyStudentForm);
+  const [editStudentModal, setEditStudentModal] = useState(null); // holds student being edited
+  const [editStudentSaving, setEditStudentSaving] = useState(false);
   const [addStudentSaving, setAddStudentSaving] = useState(false);
 
   // Staff state
@@ -2095,6 +2097,22 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
     showToast(`${first_name} ${last_name} added`);
   };
 
+  const handleEditStudent = async () => {
+    if (!editStudentModal) return;
+    const { id, first_name, last_name, age_group, gender, house, class: cls } = editStudentModal;
+    if (!first_name.trim() || !last_name.trim()) { showToast('First and last name are required', 'error'); return; }
+    setEditStudentSaving(true);
+    const { error } = await supabase.from('students').update({
+      first_name: first_name.trim(), last_name: last_name.trim(),
+      age_group, gender, house: house.trim() || 'Unassigned', class: cls.trim(),
+    }).eq('id', id).eq('school_id', user.school_id);
+    setEditStudentSaving(false);
+    if (error) { showToast('Failed to update student: ' + error.message, 'error'); return; }
+    setStudents(prev => prev.map(s => s.id === id ? { ...s, first_name: first_name.trim(), last_name: last_name.trim(), age_group, gender, house: house.trim() || 'Unassigned', class: cls.trim() } : s));
+    setEditStudentModal(null);
+    showToast(`${first_name} ${last_name} updated`);
+  };
+
   const handleRemoveStaff = async () => {
     const { id: staffId, name } = removeModal;
     setRemoveModal({ isOpen: false, id: null, name: '' });
@@ -2167,6 +2185,62 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
           </div>
         </div>
       )}
+      {/* ── EDIT STUDENT MODAL ── */}
+      {editStudentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md">
+            <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900 dark:text-white">Edit Student</h3>
+              <button onClick={() => setEditStudentModal(null)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"><X size={18}/></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">First Name <span className="text-red-400">*</span></label>
+                  <input value={editStudentModal.first_name} onChange={e => setEditStudentModal(f => ({ ...f, first_name: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Last Name <span className="text-red-400">*</span></label>
+                  <input value={editStudentModal.last_name} onChange={e => setEditStudentModal(f => ({ ...f, last_name: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Age Group</label>
+                  <select value={editStudentModal.age_group} onChange={e => setEditStudentModal(f => ({ ...f, age_group: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white">
+                    {['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Gender</label>
+                  <select value={editStudentModal.gender} onChange={e => setEditStudentModal(f => ({ ...f, gender: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white">
+                    <option value="Boys">Boys</option>
+                    <option value="Girls">Girls</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">House</label>
+                  <input value={editStudentModal.house} onChange={e => setEditStudentModal(f => ({ ...f, house: e.target.value }))} list="house-suggestions-edit" className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                  <datalist id="house-suggestions-edit">{Object.keys(houseColors).map(h => <option key={h} value={h}/>)}</datalist>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Class</label>
+                  <input value={editStudentModal.class} onChange={e => setEditStudentModal(f => ({ ...f, class: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white"/>
+                </div>
+              </div>
+            </div>
+            <div className="px-6 pb-6 flex justify-end gap-3">
+              <button onClick={() => setEditStudentModal(null)} className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">Cancel</button>
+              <Button onClick={handleEditStudent} disabled={editStudentSaving} variant="primary">
+                {editStudentSaving ? <Loader2 size={15} className="animate-spin"/> : <Edit size={15}/>} Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header + tabs */}
       <div className="border-b border-slate-200 dark:border-slate-700">
         <div className="flex items-center justify-between pb-0">
@@ -2227,6 +2301,7 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
                       <p className="font-semibold text-slate-900 dark:text-white text-sm">{student.last_name}, {student.first_name}</p>
                       <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{student.class} · {student.age_group} · {student.gender} · {student.house || 'Unassigned'}</p>
                     </div>
+                    <button onClick={() => setEditStudentModal({ ...student })} className="p-1.5 text-slate-300 hover:text-sky-500 transition-colors" title="Edit student"><Edit size={14}/></button>
                     <button onClick={() => setDeleteStudentModal({ isOpen: true, id: student.id, name: `${student.first_name} ${student.last_name}` })} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors" title="Remove student"><Trash2 size={14}/></button>
                   </div>
                 ))}
@@ -2255,7 +2330,12 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.age_group}</td>
                             <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{student.gender}</td>
                             <td className="px-4 py-3 text-slate-500 dark:text-slate-400"><span className={`inline-block w-2 h-2 rounded-full mr-2 ${getHouseColor(student.house, houseColors)}`}></span>{student.house || 'Unassigned'}</td>
-                            <td className="px-4 py-3 text-right"><button onClick={() => setDeleteStudentModal({ isOpen: true, id: student.id, name: `${student.first_name} ${student.last_name}` })} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all" title="Remove student"><Trash2 size={14}/></button></td>
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                <button onClick={() => setEditStudentModal({ ...student })} className="p-1 text-slate-300 hover:text-sky-500 transition-colors" title="Edit student"><Edit size={14}/></button>
+                                <button onClick={() => setDeleteStudentModal({ isOpen: true, id: student.id, name: `${student.first_name} ${student.last_name}` })} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Remove student"><Trash2 size={14}/></button>
+                              </div>
+                            </td>
                           </tr>
                         </React.Fragment>
                       );
