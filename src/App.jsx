@@ -2022,7 +2022,12 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
       const vB = (b[sortConfig.key]||'').toString().toLowerCase();
       // Use natural sort for class (handles 4.1, 4.2, 4.10 correctly)
       const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
-      return sortConfig.direction === 'asc' ? cmp : -cmp;
+      if (cmp !== 0) return sortConfig.direction === 'asc' ? cmp : -cmp;
+      // Secondary sort: gender (Boys before Girls), then last name
+      const gA = (a.gender||'').toLowerCase();
+      const gB = (b.gender||'').toLowerCase();
+      if (gA !== gB) return gA < gB ? -1 : 1;
+      return (a.last_name||'').toLowerCase().localeCompare((b.last_name||'').toLowerCase());
     });
   }, [students, searchTerm, sortConfig]);
 
