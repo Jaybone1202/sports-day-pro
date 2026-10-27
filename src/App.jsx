@@ -2020,9 +2020,9 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
     return [...result].sort((a, b) => {
       const vA = (a[sortConfig.key]||'').toString().toLowerCase();
       const vB = (b[sortConfig.key]||'').toString().toLowerCase();
-      if (vA < vB) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (vA > vB) return sortConfig.direction === 'asc' ?  1 : -1;
-      return 0;
+      // Use natural sort for class (handles 4.1, 4.2, 4.10 correctly)
+      const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+      return sortConfig.direction === 'asc' ? cmp : -cmp;
     });
   }, [students, searchTerm, sortConfig]);
 
