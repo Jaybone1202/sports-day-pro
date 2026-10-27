@@ -3089,7 +3089,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({
         name, unit, count,
         savedFilters: sessionMap[name] || null,
-      })));
+      })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
     } catch (e) { console.error('History fetch error', e); }
   }, [selectedTrialId]);
 
@@ -3406,10 +3406,10 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                 <Card className="!p-0 overflow-hidden">
                   <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-700">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2"><Clock size={15} className="text-purple-500"/> Continue a Previous Activity</h3>
+                      <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2"><Clock size={15} className="text-purple-500"/> Saved Trials</h3>
                       <span className="text-xs text-slate-400">{trialHistory.length} recorded</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">Click an activity to reload the same roster with saved results.</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Click a trial to reload the same roster with saved results.</p>
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-700">
                     {trialHistory.map((item, idx) => (
