@@ -3141,8 +3141,13 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const saveHistoryName = async () => {
     if (!editingHistory.newName.trim()) return;
     try {
-      const { error } = await supabase.from('trial_results').update({ activity_name: editingHistory.newName.trim() }).eq('trial_id', selectedTrialId).eq('activity_name', editingHistory.oldName);
-      if (error) throw error;
+      const newName = editingHistory.newName.trim();
+      const [{ error: e1 }, { error: e2 }] = await Promise.all([
+        supabase.from('trial_results').update({ activity_name: newName }).eq('trial_id', selectedTrialId).eq('activity_name', editingHistory.oldName),
+        supabase.from('trial_activity_sessions').update({ activity_name: newName }).eq('trial_id', selectedTrialId).eq('activity_name', editingHistory.oldName),
+      ]);
+      if (e1) throw e1;
+      if (e2) throw e2;
       showToast('Trial name updated.');
       setEditingHistory(null);
       fetchHistory();
