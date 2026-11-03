@@ -3070,7 +3070,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     try {
       const [{ data: results }, { data: sessions }] = await Promise.all([
         supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId),
-        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json').eq('trial_id', selectedTrialId),
+        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete').eq('trial_id', selectedTrialId),
       ]);
       const sessionMap = {};
       (sessions || []).forEach(s => {
@@ -3079,6 +3079,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
           scoringMode: s.scoring_mode || 'standard',
           numAttempts: s.num_attempts || 3,
           heights: s.heights_json || [],
+          isComplete: s.is_complete || false,
         };
       });
       const actMap = {};
@@ -3089,6 +3090,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({
         name, unit, count,
         savedFilters: sessionMap[name] || null,
+        isComplete: sessionMap[name]?.isComplete || false,
       })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
     } catch (e) { console.error('History fetch error', e); }
   }, [selectedTrialId]);
@@ -3100,7 +3102,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const handleStartTrial = () => {
     if (!trialFilters.customActivityName) { showToast('Please provide an activity name (e.g., 100m Sprint).', 'error'); return; }
     const t = allTrials.find(t => t.id === selectedTrialId);
-    onSelectActivity({ isTrial: true, trialData: t, filters: trialFilters, refreshHistoryCallback: fetchHistory });
+    onSelectActivity({ isTrial: true, trialData: t, filters: { ...trialFilters, customActivityName: trialFilters.customActivityName.trim() }, refreshHistoryCallback: fetchHistory });
   };
 
   const openHistorySession = (item) => {
@@ -3126,6 +3128,15 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     const filters = { ...restoredFilters, customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
     onSelectActivity({ isTrial: true, trialData: t, filters, isHistory: true, refreshHistoryCallback: fetchHistory });
+  };
+
+  const toggleHistoryComplete = async (item) => {
+    const newVal = !item.isComplete;
+    setTrialHistory(prev => prev.map(h => h.name === item.name ? { ...h, isComplete: newVal } : h));
+    await supabase.from('trial_activity_sessions')
+      .update({ is_complete: newVal })
+      .eq('trial_id', selectedTrialId)
+      .eq('activity_name', item.name);
   };
 
   const confirmDeleteHistory = async () => {
@@ -3418,7 +3429,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   </div>
                   <div className="divide-y divide-slate-100 dark:divide-slate-700">
                     {trialHistory.map((item, idx) => (
-                      <div key={idx} className="flex items-center gap-3 px-5 py-3 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group">
+                      <div key={idx} className={`flex items-center gap-3 px-5 py-3 transition-colors group ${item.isComplete ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' : 'hover:bg-purple-50 dark:hover:bg-purple-900/20'}`}>
                         {editingHistory && editingHistory.oldName === item.name ? (
                           <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
                             <input autoFocus type="text" value={editingHistory.newName} onChange={(e) => setEditingHistory({...editingHistory, newName: e.target.value})}
@@ -3429,17 +3440,26 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                         ) : (
                           <>
                             <button onClick={() => openHistorySession(item)} className="flex-1 flex items-center gap-3 text-left">
-                              <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg shrink-0"><Activity size={14} className="text-purple-600 dark:text-purple-400"/></div>
+                              <div className={`p-2 rounded-lg shrink-0 ${item.isComplete ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-purple-100 dark:bg-purple-900/40'}`}>
+                                <Activity size={14} className={item.isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'}/>
+                              </div>
                               <div>
-                                <p className="font-semibold text-slate-800 dark:text-white text-sm group-hover:text-purple-700">{item.name}</p>
-                                <p className="text-xs text-slate-400">{item.unit} · <span className="text-purple-500 font-semibold">{item.count} student{item.count !== 1 ? 's' : ''}</span></p>
+                                <p className={`font-semibold text-sm ${item.isComplete ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white group-hover:text-purple-700'}`}>{item.name}</p>
+                                <p className="text-xs text-slate-400">{item.unit} · <span className={`font-semibold ${item.isComplete ? 'text-emerald-500' : 'text-purple-500'}`}>{item.count} student{item.count !== 1 ? 's' : ''}</span></p>
                               </div>
                             </button>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={e => { e.stopPropagation(); setEditingHistory({ oldName: item.name, newName: item.name }); }}
-                                className="p-1.5 text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Rename"><Edit size={13}/></button>
-                              <button onClick={e => { e.stopPropagation(); setModalConfig({ isOpen: true, type: 'delete-history', payload: item }); }}
-                                className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Delete"><Trash2 size={13}/></button>
+                            <div className="flex gap-1 items-center">
+                              <button onClick={e => { e.stopPropagation(); toggleHistoryComplete(item); }}
+                                className={`p-1.5 rounded transition-colors ${item.isComplete ? 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'}`}
+                                title={item.isComplete ? 'Mark incomplete' : 'Mark complete'}>
+                                <CheckCircle2 size={16}/>
+                              </button>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={e => { e.stopPropagation(); setEditingHistory({ oldName: item.name, newName: item.name }); }}
+                                  className="p-1.5 text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Rename"><Edit size={13}/></button>
+                                <button onClick={e => { e.stopPropagation(); setModalConfig({ isOpen: true, type: 'delete-history', payload: item }); }}
+                                  className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Delete"><Trash2 size={13}/></button>
+                              </div>
                             </div>
                           </>
                         )}
