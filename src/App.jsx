@@ -1676,8 +1676,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                           <table className="w-full text-sm text-left">
                             <thead className="bg-slate-50 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-600 sticky top-0 z-10">
                               <tr>
-                                <th className="px-4 py-3 font-semibold">Group</th>
-                                <th className="px-4 py-3 font-semibold">Activity</th>
+                                <th className="px-4 py-3 font-semibold sticky left-0 bg-white dark:bg-slate-800 z-10">Activity</th>
                                 <th className="px-4 py-3 font-semibold text-center">Kids/House</th>
                                 <th className="px-4 py-3 font-semibold text-amber-600"><div className="flex items-center gap-1"><Trophy size={14}/> Edit Record</div></th>
                                 {!staffSeeAll && selectedEventId !== 'new' && <th className="px-4 py-3 font-semibold text-slate-600 dark:text-slate-300">Assigned Staff</th>}
@@ -1687,8 +1686,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                               {activities.map(act => (<React.Fragment key={act.id}>
                                 <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/30 group">
-                                  <td className="px-4 py-3 font-medium text-slate-900 dark:text-white"><span className="font-bold mr-1">{act.ageGroup}</span><span className={act.gender === 'Boys' ? 'text-blue-600' : act.gender === 'Girls' ? 'text-pink-600' : 'text-purple-600'}>{act.gender}</span></td>
-                                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                                  <td className="px-4 py-3 sticky left-0 bg-white dark:bg-slate-800 z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]">
                                     <div className="font-semibold text-slate-900 dark:text-white">{act.name}</div>
                                     <div className="flex items-center gap-1.5 mt-0.5">
                                       <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-700 dark:bg-slate-500 text-white">{act.ageGroup}</span>
@@ -1745,7 +1743,7 @@ const EventSetupModule = ({ onBack, user, showToast, embedded }) => {
                                 </tr>
                                 {expandedActivity === act.id ? (
                                   <tr className="bg-sky-50/60 dark:bg-sky-900/10">
-                                    <td colSpan={!staffSeeAll && selectedEventId !== 'new' ? 6 : 5} className="px-4 py-3">
+                                    <td colSpan={!staffSeeAll && selectedEventId !== 'new' ? 5 : 4} className="px-4 py-3">
                                       <div className="flex flex-wrap gap-4 items-start">
                                         <div className="flex items-center gap-2">
                                           <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Multiple attempts</span>
