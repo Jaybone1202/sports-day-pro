@@ -2962,23 +2962,55 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
               const classStudents = printStudents.filter(s => (s.class || 'No Class') === cls);
               const relevantActs = activityNames.filter(a => classStudents.some(s => isRelevant(s, a)));
               if (classStudents.length === 0) return '';
-              const headerRow = relevantActs.map(a => `<th style="padding:4px 6px;border:1px solid #ccc;font-size:10px;text-align:center;max-width:80px;word-break:break-word">${escHtml(a)}</th>`).join('');
+              const headerRow = relevantActs.map(a => `<th class="grp-col" style="max-width:80px;word-break:break-word">${escHtml(a)}</th>`).join('');
               const bodyRows = classStudents.map(student => {
                 const cells = relevantActs.map(a => {
-                  if (!isRelevant(student, a)) return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:#f8f8f8;color:#ccc">—</td>`;
+                  if (!isRelevant(student, a)) return `<td class="tick na">—</td>`;
                   const has = hasResult(student, a);
-                  return has
-                    ? `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:#f0fdf4;color:#16a34a;font-weight:bold">✓</td>`
-                    : `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;color:#d1d5db">✗</td>`;
+                  return has ? `<td class="tick done">✓</td>` : `<td class="tick miss">✗</td>`;
                 }).join('');
-                return `<tr><td style="padding:3px 8px;border:1px solid #eee;white-space:nowrap;font-weight:500">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td style="padding:3px 6px;border:1px solid #eee;color:#666">${escHtml(student.age_group||'')}</td>${cells}</tr>`;
+                return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.age_group||'')}</td>${cells}</tr>`;
               }).join('');
-              const pageBreak = ci < classes.length - 1 ? 'page-break-after:always;' : '';
-              return `<div style="${pageBreak}padding-bottom:16px"><h2 style="font-size:14px;font-weight:bold;margin:0 0 4px 0;padding:6px 8px;background:#f1f5f9;border-radius:4px">Class: ${escHtml(cls)} <span style="font-weight:normal;font-size:11px;color:#666">(${classStudents.length} students)</span></h2><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:4px 8px;border:1px solid #ccc;text-align:left;font-size:11px">Student</th><th style="padding:4px 6px;border:1px solid #ccc;font-size:10px">Group</th>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+              const pb = ci < classes.length - 1 ? ' page-break' : '';
+              const done = classStudents.filter(s => relevantActs.some(a => isRelevant(s,a) && hasResult(s,a))).length;
+              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${classStudents.length} students · ${done} with results</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">Group</th>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table><p class="legend">✓ trial recorded &nbsp;·&nbsp; ✗ not yet recorded &nbsp;·&nbsp; — not in this event</p></div>`;
             }).join('');
             const win = window.open('', '_blank', 'width=900,height=700');
             if (!win) return;
-            win.document.write(`<!DOCTYPE html><html><head><title>Checklist by Class</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}@media print{body{padding:0}}</style></head><body><h1 style="font-size:16px;margin:0 0 12px 0">Sports Day — Student Completion Checklist by Class</h1>${sections}</body></html>`);
+            const printDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+            const css = `
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+              *{box-sizing:border-box;margin:0;padding:0}
+              body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
+              .doc-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #0ea5e9;padding-bottom:10px;margin-bottom:20px}
+              .doc-title{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px}
+              .doc-sub{font-size:11px;color:#64748b;margin-top:2px}
+              .doc-meta{text-align:right;font-size:10px;color:#94a3b8}
+              .class-block{margin-bottom:0}
+              .class-header{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#0ea5e9 0%,#38bdf8 100%);color:#fff;padding:7px 12px;border-radius:6px 6px 0 0;margin-bottom:0}
+              .class-name{font-size:13px;font-weight:700;letter-spacing:0.2px}
+              .class-count{font-size:10px;opacity:0.85;margin-left:auto}
+              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+              thead tr{background:#f8fafc}
+              th{padding:5px 7px;border:1px solid #e2e8f0;font-size:9.5px;font-weight:600;color:#475569;text-align:center;vertical-align:bottom;line-height:1.3}
+              th.name-col{text-align:left;min-width:110px}
+              th.grp-col{min-width:46px}
+              td{padding:4px 7px;border:1px solid #f1f5f9;vertical-align:middle}
+              tr:nth-child(even) td{background:#f8fafc}
+              td.name-col{font-weight:600;white-space:nowrap;color:#0f172a}
+              td.grp-col{text-align:center;color:#64748b;font-size:10px}
+              td.tick{text-align:center}
+              td.tick.done{background:#f0fdf4;color:#16a34a;font-weight:700;font-size:13px}
+              td.tick.miss{background:#fff;color:#cbd5e1;font-size:12px}
+              td.tick.na{background:#f8fafc;color:#cbd5e1;font-size:11px}
+              .legend{font-size:9px;color:#94a3b8;margin-top:6px}
+              @media print{
+                body{padding:10px}
+                .page-break{page-break-after:always}
+                @page{margin:12mm 10mm}
+              }
+            `;
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Checklist by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Student Completion Checklist</div><div class="doc-sub">Sports Day — by Class${filterActive?' · Filtered view':''}</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections}</body></html>`);
             win.document.close();
             win.focus();
             setTimeout(() => { win.print(); }, 400);
@@ -3221,24 +3253,62 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               // Find events where at least one class student appears
               const relevantEas = (eventActivities||[]).filter(ea => eaAthletes[ea.id]?.some(r => r.student?.class === cls || (!r.student?.class && cls === 'No Class')));
               if (relevantEas.length === 0) return '';
-              const pageBreak = ci < allClasses.length - 1 ? 'page-break-after:always;' : '';
+              const pb = ci < allClasses.length - 1 ? ' page-break' : '';
+              const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
               const rows = classStudents.map(student => {
+                const inAny = relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === student.id));
+                if (!inAny) return '';
                 const eventCells = relevantEas.map(ea => {
                   const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
-                  if (!entry) return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;color:#ccc">—</td>`;
+                  if (!entry) return `<td class="tick na">—</td>`;
                   const sel = entry.selected;
                   const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
                   const rank = eaAthletes[ea.id].indexOf(entry) + 1;
-                  return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:${sel?'#f0fdf4':'#fafafa'};color:${sel?'#16a34a':'#9ca3af'};font-size:10px"><div style="font-weight:bold">${sel?'✓':rank}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
+                  return sel
+                    ? `<td class="tick done"><div>#${rank}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`
+                    : `<td class="tick miss"><div>${rank}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
                 }).join('');
-                return `<tr><td style="padding:3px 8px;border:1px solid #eee;white-space:nowrap;font-weight:500">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td style="padding:3px 6px;border:1px solid #eee;color:#666;font-size:10px">${escHtml(student.house||'')}</td>${eventCells}</tr>`;
-              }).join('');
-              const headers = relevantEas.map(ea => `<th style="padding:4px 6px;border:1px solid #ccc;font-size:9px;text-align:center;max-width:72px;word-break:break-word">${escHtml(ea.name)}<br/><span style="font-weight:normal;color:#666">${escHtml(ea.age_group)} ${escHtml(ea.gender)}</span></th>`).join('');
-              return `<div style="${pageBreak}padding-bottom:16px"><h2 style="font-size:14px;font-weight:bold;margin:0 0 4px 0;padding:6px 8px;background:#f1f5f9;border-radius:4px">Class: ${escHtml(cls)} <span style="font-weight:normal;font-size:11px;color:#666">(${classStudents.length} students)</span></h2><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:4px 8px;border:1px solid #ccc;text-align:left">Student</th><th style="padding:4px 6px;border:1px solid #ccc;font-size:10px">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p style="font-size:9px;color:#666;margin:4px 0 0">✓ = selected for event &nbsp;|&nbsp; number = overall rank &nbsp;|&nbsp; — = not in this event</p></div>`;
+                return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
+              }).filter(Boolean).join('');
+              const headers = relevantEas.map(ea => `<th class="grp-col" style="max-width:72px;word-break:break-word">${escHtml(ea.name)}<br/><span style="font-weight:400;color:#94a3b8;font-size:8.5px">${escHtml(ea.age_group)} ${escHtml(ea.gender)}</span></th>`).join('');
+              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${relevantEas.length} event${relevantEas.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p class="legend">Green #N = selected &nbsp;·&nbsp; grey N = ranked but not selected &nbsp;·&nbsp; — = no result for this event</p></div>`;
             }).filter(Boolean).join('');
             const win = window.open('', '_blank', 'width=1000,height=700');
             if (!win) return;
-            win.document.write(`<!DOCTYPE html><html><head><title>Athletes by Class</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}@media print{body{padding:0}}</style></head><body><h1 style="font-size:16px;margin:0 0 12px 0">Sports Day — Athletes List by Class</h1>${sections}</body></html>`);
+            const printDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+            const css = `
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+              *{box-sizing:border-box;margin:0;padding:0}
+              body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
+              .doc-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:10px;margin-bottom:20px}
+              .doc-title{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px}
+              .doc-sub{font-size:11px;color:#64748b;margin-top:2px}
+              .doc-meta{text-align:right;font-size:10px;color:#94a3b8}
+              .class-block{margin-bottom:0}
+              .class-header{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#d97706 0%,#f59e0b 100%);color:#fff;padding:7px 12px;border-radius:6px 6px 0 0}
+              .class-name{font-size:13px;font-weight:700;letter-spacing:0.2px}
+              .class-count{font-size:10px;opacity:0.9;margin-left:auto}
+              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none;margin-bottom:12px}
+              thead tr{background:#f8fafc}
+              th{padding:5px 7px;border:1px solid #e2e8f0;font-size:9.5px;font-weight:600;color:#475569;text-align:center;vertical-align:bottom;line-height:1.3}
+              th.name-col{text-align:left;min-width:110px}
+              th.grp-col{min-width:46px}
+              td{padding:4px 7px;border:1px solid #f1f5f9;vertical-align:middle}
+              tr:nth-child(even) td{background:#fafafa}
+              td.name-col{font-weight:600;white-space:nowrap;color:#0f172a}
+              td.grp-col{text-align:center;color:#64748b;font-size:10px}
+              td.tick{text-align:center;vertical-align:middle}
+              td.tick.done{background:#f0fdf4;color:#16a34a;font-weight:700}
+              td.tick.miss{background:#fff;color:#94a3b8}
+              td.tick.na{background:#f8fafc;color:#cbd5e1}
+              .legend{font-size:9px;color:#94a3b8;margin:4px 0 16px}
+              @media print{
+                body{padding:10px}
+                .page-break{page-break-after:always}
+                @page{margin:12mm 10mm}
+              }
+            `;
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Athletes by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Athletes List</div><div class="doc-sub">Sports Day — by Class</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections}</body></html>`);
             win.document.close(); win.focus();
             setTimeout(() => { win.print(); }, 400);
           }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
