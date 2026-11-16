@@ -3081,9 +3081,18 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
       );
   }, [results, selectedEa, studentMap]);
 
-  const cutoff = selectedEa && selectedEa.participants_per_house && houseCount
-    ? selectedEa.participants_per_house * houseCount
-    : null;
+  // Per-house selection: mark each athlete as selected if they're in the top N for their house
+  const perHouseLimit = selectedEa?.participants_per_house || null;
+  const rankedAthletesWithSelection = React.useMemo(() => {
+    if (!perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null }));
+    const houseCounts = {};
+    return rankedAthletes.map(r => {
+      const house = r.student?.house || 'Unknown';
+      houseCounts[house] = (houseCounts[house] || 0) + 1;
+      const houseRank = houseCounts[house];
+      return { ...r, selected: houseRank <= perHouseLimit, houseRank };
+    });
+  }, [rankedAthletes, perHouseLimit]);
 
   const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-sky-500";
 
@@ -3127,7 +3136,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               <span className="font-bold text-white text-sm">{selectedEa.name} — {selectedEa.age_group} {selectedEa.gender}</span>
             </div>
             <div className="flex items-center gap-3">
-              {cutoff && <span className="text-xs text-amber-300">{cutoff} spots ({selectedEa.participants_per_house}/house × {houseCount} houses)</span>}
+              {perHouseLimit && houseCount > 0 && <span className="text-xs text-amber-300">{perHouseLimit * houseCount} spots ({perHouseLimit}/house × {houseCount} houses)</span>}
               <span className="text-sm text-slate-400">{rankedAthletes.length} athlete{rankedAthletes.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
@@ -3135,41 +3144,34 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             <div className="text-center py-10 text-slate-400 text-sm">No trial results found for this event activity.</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {rankedAthletes.map((r, idx) => {
-                const isCutoffLine = cutoff !== null && idx === cutoff;
-                return (
-                  <React.Fragment key={r.student_id}>
-                    {isCutoffLine && (
-                      <div className="flex items-center gap-2 px-5 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-y border-amber-200 dark:border-amber-700">
-                        <div className="flex-1 h-px bg-amber-300 dark:bg-amber-600"/>
-                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">Selection cutoff — {cutoff} spots</span>
-                        <div className="flex-1 h-px bg-amber-300 dark:bg-amber-600"/>
-                      </div>
-                    )}
-                    <div className={`flex items-center gap-3 px-5 py-3 ${cutoff !== null && idx >= cutoff ? 'opacity-50' : ''}`}>
-                      <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{r.student.class}</p>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
-                      </div>
-                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm">
-                        {r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{(r.unit || selectedEa.unit) ? ` ${r.unit || selectedEa.unit}` : ''}
+              {rankedAthletesWithSelection.map((r, idx) => (
+                <div key={r.student_id} className={`flex items-center gap-3 px-5 py-3 ${r.selected === false ? 'opacity-40' : ''}`}>
+                  <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{r.student.class}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
+                    {perHouseLimit && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${r.selected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-700'}`}>
+                        {r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
                       </span>
-                    </div>
-                  </React.Fragment>
-                );
-              })}
+                    )}
+                  </div>
+                  <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm">
+                    {r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{(r.unit || selectedEa.unit) ? ` ${r.unit || selectedEa.unit}` : ''}
+                  </span>
+                </div>
+              ))}
             </div>
           )}
         </Card>
       )}
       <p className="text-xs text-slate-400 hide-on-print">
         {rankedAthletes.length} athletes listed · sorted by {selectedEa?.higher_is_better !== false ? 'best (highest)' : 'best (lowest)'} result
-        {cutoff ? ` · top ${cutoff} selected` : ''}
+        {perHouseLimit ? ` · top ${perHouseLimit} per house selected` : ''}
       </p>
     </div>
   );
