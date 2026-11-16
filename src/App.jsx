@@ -54,6 +54,7 @@ import {
   Hash,
   Download,
   AlertTriangle,
+  Link,
 } from 'lucide-react';
 
 // ==========================================
@@ -3386,6 +3387,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const [modalConfig, setModalConfig]           = useState({ isOpen: false, type: null, payload: null });
   const [editingHistory, setEditingHistory]     = useState(null);
   const [resultCounts, setResultCounts]         = useState({});
+  const [linkingItem, setLinkingItem]           = useState(null); // history item currently being linked
 
   useEffect(() => {
     const fetchContexts = async () => {
@@ -3536,6 +3538,23 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       .update({ is_complete: newVal })
       .eq('trial_id', selectedTrialId)
       .eq('activity_name', item.name);
+  };
+
+  const saveLinkHistorySession = async (item, eaId) => {
+    if (!eaId) return;
+    try {
+      await supabase.from('trial_activity_sessions')
+        .update({ event_activity_id: eaId })
+        .eq('trial_id', selectedTrialId)
+        .eq('activity_name', item.name);
+      setTrialHistory(prev => prev.map(h => h.name === item.name
+        ? { ...h, savedFilters: { ...(h.savedFilters || {}), eventActivityId: eaId } }
+        : h
+      ));
+      setLinkingItem(null);
+      const ea = trialEventActivities.find(a => a.id === eaId);
+      showToast(`Linked to "${ea?.name || 'event activity'}"`, 'success');
+    } catch (e) { showToast('Failed to save link', 'error'); }
   };
 
   const confirmDeleteHistory = async () => {
@@ -3874,28 +3893,56 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                           </div>
                         ) : (
                           <>
-                            <button onClick={() => openHistorySession(item)} className="flex-1 flex items-center gap-3 text-left">
+                            <button onClick={() => openHistorySession(item)} className="flex-1 flex items-center gap-3 text-left min-w-0">
                               <div className={`p-2 rounded-lg shrink-0 ${item.isComplete ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-purple-100 dark:bg-purple-900/40'}`}>
                                 <Activity size={14} className={item.isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-purple-600 dark:text-purple-400'}/>
                               </div>
-                              <div>
-                                <p className={`font-semibold text-sm ${item.isComplete ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white group-hover:text-purple-700'}`}>{item.name}</p>
-                                <p className="text-xs text-slate-400">{item.unit} · <span className={`font-semibold ${item.isComplete ? 'text-emerald-500' : 'text-purple-500'}`}>{item.count} student{item.count !== 1 ? 's' : ''}</span></p>
+                              <div className="min-w-0">
+                                <p className={`font-semibold text-sm truncate ${item.isComplete ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white group-hover:text-purple-700'}`}>{item.name}</p>
+                                <p className="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
+                                  {item.unit} · <span className={`font-semibold ${item.isComplete ? 'text-emerald-500' : 'text-purple-500'}`}>{item.count} student{item.count !== 1 ? 's' : ''}</span>
+                                  {item.savedFilters?.eventActivityId
+                                    ? <span className="text-emerald-500 font-medium">· ✓ linked</span>
+                                    : <span className="text-amber-500 font-medium">· unlinked</span>
+                                  }
+                                </p>
                               </div>
                             </button>
-                            <div className="flex gap-1 items-center">
-                              <button onClick={e => { e.stopPropagation(); toggleHistoryComplete(item); }}
-                                className={`p-1.5 rounded transition-colors ${item.isComplete ? 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'}`}
-                                title={item.isComplete ? 'Mark incomplete' : 'Mark complete'}>
-                                <CheckCircle2 size={16}/>
-                              </button>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={e => { e.stopPropagation(); setEditingHistory({ oldName: item.name, newName: item.name }); }}
-                                  className="p-1.5 text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Rename"><Edit size={13}/></button>
-                                <button onClick={e => { e.stopPropagation(); setModalConfig({ isOpen: true, type: 'delete-history', payload: item }); }}
-                                  className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Delete"><Trash2 size={13}/></button>
+                            {/* Link picker inline */}
+                            {linkingItem === item.name ? (
+                              <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                                <div className="relative">
+                                  <select autoFocus defaultValue=""
+                                    onChange={e => { if (e.target.value) saveLinkHistorySession(item, e.target.value); }}
+                                    className="text-xs px-2 py-1.5 border border-purple-300 dark:border-purple-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white outline-none max-w-[180px]">
+                                    <option value="" disabled>Pick event activity…</option>
+                                    {trialEventActivities.map(ea => (
+                                      <option key={ea.id} value={ea.id}>{ea.name} — {ea.age_group} {ea.gender}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <button onClick={() => setLinkingItem(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded"><X size={14}/></button>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="flex gap-1 items-center shrink-0">
+                                <button onClick={e => { e.stopPropagation(); toggleHistoryComplete(item); }}
+                                  className={`p-1.5 rounded transition-colors ${item.isComplete ? 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'}`}
+                                  title={item.isComplete ? 'Mark incomplete' : 'Mark complete'}>
+                                  <CheckCircle2 size={16}/>
+                                </button>
+                                <button onClick={e => { e.stopPropagation(); setLinkingItem(item.name); }}
+                                  className={`p-1.5 rounded transition-colors text-xs font-semibold ${item.savedFilters?.eventActivityId ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30' : 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/30'}`}
+                                  title={item.savedFilters?.eventActivityId ? 'Re-link to event activity' : 'Link to event activity'}>
+                                  <Link size={14}/>
+                                </button>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={e => { e.stopPropagation(); setEditingHistory({ oldName: item.name, newName: item.name }); }}
+                                    className="p-1.5 text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded" title="Rename"><Edit size={13}/></button>
+                                  <button onClick={e => { e.stopPropagation(); setModalConfig({ isOpen: true, type: 'delete-history', payload: item }); }}
+                                    className="p-1.5 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded" title="Delete"><Trash2 size={13}/></button>
+                                </div>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>
