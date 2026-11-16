@@ -2214,7 +2214,7 @@ const StudentDirectoryModule = ({ user, showToast, onNavigateToImport }) => {
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Age Group</label>
                   <select value={editStudentModal.age_group} onChange={e => setEditStudentModal(f => ({ ...f, age_group: e.target.value }))} className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400 dark:bg-slate-700 dark:text-white">
-                    {['U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].map(a => <option key={a} value={a}>{a}</option>)}
+                    {[...new Set([editStudentModal.age_group, 'U10','U11','U12','U13','U14','U15','U16','U17','U18','U19','Open'].filter(Boolean))].map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                 </div>
                 <div>
