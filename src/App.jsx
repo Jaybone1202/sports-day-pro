@@ -2788,6 +2788,317 @@ const OrganiserTrialsModule = ({ user, showToast }) => (
 );
 
 // ==========================================
+// CHECKLIST MODULE — student completion per trial activity
+// ==========================================
+const ChecklistModule = ({ user, showToast, onBack }) => {
+  const [trials, setTrials]               = useState([]);
+  const [selectedTrialId, setSelectedTrialId] = useState('');
+  const [students, setStudents]           = useState([]);
+  const [sessions, setSessions]           = useState([]);
+  const [results, setResults]             = useState([]);
+  const [filterAgeGroup, setFilterAgeGroup] = useState('All');
+  const [filterGender, setFilterGender]   = useState('All');
+  const [isLoading, setIsLoading]         = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase.from('trials').select('id, name').eq('school_id', user.school_id).order('created_at', { ascending: false });
+      setTrials(data || []);
+      if (data?.length) setSelectedTrialId(data[0].id);
+    };
+    load();
+  }, [user]);
+
+  useEffect(() => {
+    if (!selectedTrialId) return;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const [{ data: stuData }, { data: sesData }, { data: resData }] = await Promise.all([
+          supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
+          supabase.from('trial_activity_sessions').select('activity_name, filters_json').eq('trial_id', selectedTrialId),
+          supabase.from('trial_results').select('student_id, activity_name').eq('trial_id', selectedTrialId),
+        ]);
+        setStudents(stuData || []);
+        setSessions(sesData || []);
+        setResults(resData || []);
+      } catch (e) { if (showToast) showToast('Failed to load checklist data', 'error'); }
+      finally { setIsLoading(false); }
+    };
+    load();
+  }, [selectedTrialId, user]);
+
+  const resultSet = React.useMemo(() => {
+    const s = new Set();
+    (results || []).forEach(r => s.add(`${r.student_id}|${r.activity_name}`));
+    return s;
+  }, [results]);
+
+  const activities = React.useMemo(() => (sessions || []).map(s => s.activity_name), [sessions]);
+
+  const filteredStudents = React.useMemo(() => {
+    return (students || []).filter(s => {
+      if (filterAgeGroup !== 'All' && s.age_group !== filterAgeGroup) return false;
+      if (filterGender !== 'All' && s.gender !== filterGender) return false;
+      return true;
+    }).sort((a, b) => {
+      const ag = (a.age_group || '').localeCompare(b.age_group || '', undefined, { numeric: true });
+      if (ag !== 0) return ag;
+      const gc = (a.gender || '').localeCompare(b.gender || '');
+      if (gc !== 0) return gc;
+      return (a.last_name || '').localeCompare(b.last_name || '');
+    });
+  }, [students, filterAgeGroup, filterGender]);
+
+  const ageGroups = React.useMemo(() =>
+    ['All', ...[...new Set((students || []).map(s => s.age_group).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))],
+    [students]
+  );
+
+  const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-sky-500";
+
+  return (
+    <div className="space-y-4">
+      <style>{`@media print { .hide-on-print { display: none !important; } body { font-size: 11px; } }`}</style>
+      <div className="flex items-center gap-3 hide-on-print">
+        <button onClick={onBack} className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300">
+          <ChevronLeft size={18}/>
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Student Completion Checklist</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Who has trial data for each event</p>
+        </div>
+        <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
+          <Printer size={15}/> Print
+        </button>
+      </div>
+
+      <div className="flex gap-2 flex-wrap hide-on-print">
+        <select value={selectedTrialId} onChange={e => setSelectedTrialId(e.target.value)} className={selectClass}>
+          <option value="">— Select trial —</option>
+          {trials.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={filterAgeGroup} onChange={e => setFilterAgeGroup(e.target.value)} className={selectClass}>
+          {ageGroups.map(ag => <option key={ag} value={ag}>{ag === 'All' ? 'All age groups' : ag}</option>)}
+        </select>
+        <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className={selectClass}>
+          {['All', 'Boys', 'Girls'].map(g => <option key={g} value={g}>{g === 'All' ? 'All genders' : g}</option>)}
+        </select>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin text-slate-300" size={28}/></div>
+      ) : !selectedTrialId ? (
+        <div className="text-center py-16 text-slate-400">
+          <ClipboardList size={40} className="mx-auto mb-3 opacity-30"/>
+          <p className="font-semibold">Select a trial to view the checklist</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-700/60 border-b border-slate-200 dark:border-slate-600 sticky top-0">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">Student</th>
+                <th className="px-3 py-3 text-left font-semibold text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Class</th>
+                <th className="px-3 py-3 text-left font-semibold text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Age Group</th>
+                {activities.map(a => (
+                  <th key={a} className="px-3 py-3 text-center font-semibold text-xs text-slate-600 dark:text-slate-300">
+                    <div className="whitespace-nowrap">{a}</div>
+                    <div className="text-emerald-600 dark:text-emerald-400 font-normal font-mono mt-0.5">
+                      {results.filter(r => r.activity_name === a && filteredStudents.some(s => s.id === r.student_id)).length}
+                      <span className="text-slate-400">/{filteredStudents.length}</span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {filteredStudents.length === 0 ? (
+                <tr><td colSpan={3 + activities.length} className="text-center py-10 text-slate-400">No students match the current filter.</td></tr>
+              ) : filteredStudents.map(student => (
+                <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
+                  <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{student.last_name}, {student.first_name}</td>
+                  <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{student.class}</td>
+                  <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{student.age_group}</td>
+                  {activities.map(a => {
+                    const has = resultSet.has(`${student.id}|${a}`);
+                    return (
+                      <td key={a} className={`px-3 py-2.5 text-center ${has ? 'bg-emerald-50 dark:bg-emerald-900/10' : ''}`}>
+                        {has
+                          ? <CheckCircle2 size={16} className="text-emerald-500 mx-auto"/>
+                          : <X size={14} className="text-slate-300 dark:text-slate-600 mx-auto"/>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs text-slate-400 hide-on-print">
+        {filteredStudents.length} students · {activities.length} activities · {results.length} total records in this trial
+      </p>
+    </div>
+  );
+};
+
+// ==========================================
+// ATHLETES LIST MODULE — ranked results per activity for pre-event selection
+// ==========================================
+const AthletesListModule = ({ user, showToast, onBack }) => {
+  const [trials, setTrials]               = useState([]);
+  const [selectedTrialId, setSelectedTrialId] = useState('');
+  const [sessions, setSessions]           = useState([]);
+  const [selectedActivity, setSelectedActivity] = useState('');
+  const [students, setStudents]           = useState([]);
+  const [results, setResults]             = useState([]);
+  const [filterAgeGroup, setFilterAgeGroup] = useState('All');
+  const [filterGender, setFilterGender]   = useState('All');
+  const [isLoading, setIsLoading]         = useState(false);
+  const [houseColors, setHouseColors]     = useState({});
+
+  useEffect(() => {
+    const load = async () => {
+      const [{ data: trialData }, { data: hcData }] = await Promise.all([
+        supabase.from('trials').select('id, name').eq('school_id', user.school_id).order('created_at', { ascending: false }),
+        supabase.from('school_houses').select('*').eq('school_id', user.school_id),
+      ]);
+      setTrials(trialData || []);
+      if (trialData?.length) setSelectedTrialId(trialData[0].id);
+      const map = {};
+      (hcData || []).forEach(h => { map[h.house_name] = h.house_color; });
+      setHouseColors(map);
+    };
+    load();
+  }, [user]);
+
+  useEffect(() => {
+    if (!selectedTrialId) return;
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const [{ data: sesData }, { data: stuData }, { data: resData }] = await Promise.all([
+          supabase.from('trial_activity_sessions').select('activity_name, filters_json, scoring_mode').eq('trial_id', selectedTrialId),
+          supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
+          supabase.from('trial_results').select('student_id, activity_name, result_value, unit').eq('trial_id', selectedTrialId),
+        ]);
+        setSessions(sesData || []);
+        setStudents(stuData || []);
+        setResults(resData || []);
+        if (sesData?.length) {
+          setSelectedActivity(prev => sesData.find(s => s.activity_name === prev) ? prev : (sesData[0]?.activity_name || ''));
+        }
+      } catch (e) { if (showToast) showToast('Failed to load athletes data', 'error'); }
+      finally { setIsLoading(false); }
+    };
+    load();
+  }, [selectedTrialId, user]);
+
+  const studentMap = React.useMemo(() => {
+    const m = {};
+    (students || []).forEach(s => { m[s.id] = s; });
+    return m;
+  }, [students]);
+
+  const filteredResults = React.useMemo(() => {
+    if (!selectedActivity) return [];
+    return (results || [])
+      .filter(r => r.activity_name === selectedActivity)
+      .map(r => ({ ...r, student: studentMap[r.student_id] }))
+      .filter(r => {
+        if (!r.student) return false;
+        if (filterAgeGroup !== 'All' && r.student.age_group !== filterAgeGroup) return false;
+        if (filterGender !== 'All' && r.student.gender !== filterGender) return false;
+        return true;
+      })
+      .sort((a, b) => (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0));
+  }, [results, selectedActivity, studentMap, filterAgeGroup, filterGender]);
+
+  const ageGroups = React.useMemo(() =>
+    ['All', ...[...new Set((students || []).map(s => s.age_group).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))],
+    [students]
+  );
+
+  const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-sky-500";
+
+  return (
+    <div className="space-y-4">
+      <style>{`@media print { .hide-on-print { display: none !important; } }`}</style>
+      <div className="flex items-center gap-3 hide-on-print">
+        <button onClick={onBack} className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300">
+          <ChevronLeft size={18}/>
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Athletes List</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Students confirmed for each event, ranked by trial result</p>
+        </div>
+        <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
+          <Printer size={15}/> Print
+        </button>
+      </div>
+
+      <div className="flex gap-2 flex-wrap hide-on-print">
+        <select value={selectedTrialId} onChange={e => setSelectedTrialId(e.target.value)} className={selectClass}>
+          <option value="">— Select trial —</option>
+          {trials.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={selectedActivity} onChange={e => setSelectedActivity(e.target.value)} className={selectClass}>
+          <option value="">— Select activity —</option>
+          {sessions.map(s => <option key={s.activity_name} value={s.activity_name}>{s.activity_name}</option>)}
+        </select>
+        <select value={filterAgeGroup} onChange={e => setFilterAgeGroup(e.target.value)} className={selectClass}>
+          {ageGroups.map(ag => <option key={ag} value={ag}>{ag === 'All' ? 'All age groups' : ag}</option>)}
+        </select>
+        <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className={selectClass}>
+          {['All', 'Boys', 'Girls'].map(g => <option key={g} value={g}>{g === 'All' ? 'All genders' : g}</option>)}
+        </select>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-16"><Loader2 className="animate-spin text-slate-300" size={28}/></div>
+      ) : !selectedActivity ? (
+        <div className="text-center py-16 text-slate-400">
+          <Trophy size={40} className="mx-auto mb-3 opacity-30"/>
+          <p className="font-semibold">Select a trial and activity to view the athletes list</p>
+        </div>
+      ) : (
+        <Card className="!p-0 overflow-hidden">
+          <div className="px-5 py-3.5 bg-gradient-to-r from-slate-800 to-slate-700 dark:from-slate-700 dark:to-slate-600 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy size={15} className="text-amber-400"/>
+              <span className="font-bold text-white text-sm">{selectedActivity}</span>
+            </div>
+            <span className="text-sm text-slate-400">{filteredResults.length} athlete{filteredResults.length !== 1 ? 's' : ''}</span>
+          </div>
+          {filteredResults.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No results for this filter.</div>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {filteredResults.map((r, idx) => (
+                <div key={r.student_id} className="flex items-center gap-3 px-5 py-3">
+                  <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{r.student.class} · {r.student.age_group} · {r.student.gender}</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
+                  </div>
+                  <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm">{r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{r.unit ? ` ${r.unit}` : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+      <p className="text-xs text-slate-400 hide-on-print">{filteredResults.length} athletes listed · sorted by best result</p>
+    </div>
+  );
+};
+
+// ==========================================
 // FIX: Passes showToast to StudentDirectoryModule
 // ==========================================
 
@@ -2824,7 +3135,9 @@ const OrganiserDashboard = ({ user, currentView, setCurrentView, showToast, onFl
   if (currentView === 'standings') return <PageTransition keyProp="standings"><LiveStandingsModule user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'houses')    return <PageTransition keyProp="houses"><HouseSetupModule onBack={() => setCurrentView('dashboard')} user={user} showToast={showToast}/></PageTransition>;
   if (currentView === 'records')   return <PageTransition keyProp="records"><RecordBoardModule user={user} showToast={showToast}/></PageTransition>;
-  if (currentView === 'flags')     return <PageTransition keyProp="flags"><FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/></PageTransition>;
+  if (currentView === 'flags')      return <PageTransition keyProp="flags"><FlagsModule user={user} showToast={showToast} onCountChange={onFlagsChange}/></PageTransition>;
+  if (currentView === 'checklist')  return <PageTransition keyProp="checklist"><ChecklistModule user={user} showToast={showToast} onBack={() => setCurrentView('dashboard')}/></PageTransition>;
+  if (currentView === 'athletes')   return <PageTransition keyProp="athletes"><AthletesListModule user={user} showToast={showToast} onBack={() => setCurrentView('dashboard')}/></PageTransition>;
 
   const setupSteps = [
     { label: 'Add staff accounts',    desc: 'Give staff login access to enter results',   view: 'students',    done: staffCount > 0,  icon: UserPlus },
@@ -3930,7 +4243,13 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
       ? Object.entries(positionOverrides).filter(([, v]) => v !== null).map(([id, pos]) => ({ id, value: HYBRID_POSITION_OFFSET + pos }))
       : [];
     const positionIds = new Set(positionRows.map(r => r.id));
-    const withScores = Object.keys(scores).filter(id => scores[id] && scores[id].toString().trim() !== '' && !positionIds.has(id));
+    const withScores = Object.keys(scores).filter(id => {
+      if (positionIds.has(id)) return false;
+      const v = scores[id];
+      // Heights mode: allow score=0 (attempted but cleared nothing)
+      if (isTrial && tScoringMode === 'heights') return v !== undefined && v !== null && v.toString().trim() !== '';
+      return v && v.toString().trim() !== '';
+    });
     // Trials: allow saving with 0 scores (bookmarks session so it can be reopened safely)
     if (!isTrial && withScores.length === 0 && positionRows.length === 0) { showToast('No scores entered.', 'error'); return; }
     const invalid = withScores.filter(id => !isValidScore(scores[id]));
@@ -4607,7 +4926,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                           setHeightResults(prev => ({ ...prev, [student.id]: updated }));
                                           const cls = tHeights.filter(ht => updated[ht] === 'o');
                                           const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
-                                          setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                          const hasAttempt = Object.values(updated).some(v => v !== '-');
+                                          setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : hasAttempt ? { ...prev, [student.id]: 0 } : (({ [student.id]: _, ...rest }) => rest)(prev));
                                           setIsDirty(true);
                                         }}
                                           className={`px-2 py-1 rounded text-xs font-bold touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white' : btn === 'x' ? 'bg-red-500 text-white' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
@@ -4798,7 +5118,8 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
                                                     setHeightResults(prev => ({ ...prev, [student.id]: updated }));
                                                     const cls = tHeights.filter(ht => updated[ht] === 'o');
                                                     const hi = cls.length > 0 ? Math.max(...cls.map(parseFloat)) : null;
-                                                    setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : (({ [student.id]: _, ...rest }) => rest)(prev));
+                                                    const hasAttempt = Object.values(updated).some(v => v !== '-');
+                                                    setScores(prev => hi !== null ? { ...prev, [student.id]: hi } : hasAttempt ? { ...prev, [student.id]: 0 } : (({ [student.id]: _, ...rest }) => rest)(prev));
                                                     setIsDirty(true);
                                                   }}
                                                     className={`w-8 h-8 rounded-lg text-sm font-bold transition-colors touch-manipulation ${status === btn ? (btn === 'o' ? 'bg-emerald-500 text-white shadow-sm' : btn === 'x' ? 'bg-red-500 text-white shadow-sm' : 'bg-slate-500 text-white') : 'bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
@@ -6257,10 +6578,12 @@ const ORGANISER_NAV_GROUPS = [
   {
     label: 'Setup',
     items: [
-      { view: 'planning',  icon: Settings,      label: 'Planning'   },
-      { view: 'students',  icon: Users,         label: 'Directory'  },
-      { view: 'houses',    icon: Palette,       label: 'Houses'     },
-      { view: 'trials',    icon: ClipboardList, label: 'Trials'     },
+      { view: 'planning',   icon: Settings,      label: 'Planning'   },
+      { view: 'students',   icon: Users,         label: 'Directory'  },
+      { view: 'houses',     icon: Palette,       label: 'Houses'     },
+      { view: 'trials',     icon: ClipboardList, label: 'Trials'     },
+      { view: 'checklist',  icon: CheckCircle2,  label: 'Checklist'  },
+      { view: 'athletes',   icon: Trophy,        label: 'Athletes'   },
     ],
   },
   {
@@ -6290,6 +6613,8 @@ const VIEW_TO_HASH = {
   'standings':   '#/organiser/standings',
   'records':     '#/organiser/records',
   'flags':       '#/organiser/flags',
+  'checklist':   '#/organiser/checklist',
+  'athletes':    '#/organiser/athletes',
 };
 const HASH_TO_NAV = {
   '#/organiser':           { route: 'organiser-dashboard', view: 'dashboard' },
@@ -6299,7 +6624,9 @@ const HASH_TO_NAV = {
   '#/organiser/houses':    { route: 'organiser-dashboard', view: 'houses'    },
   '#/organiser/standings': { route: 'organiser-dashboard', view: 'standings' },
   '#/organiser/records':   { route: 'organiser-dashboard', view: 'records'   },
-  '#/organiser/flags':     { route: 'organiser-dashboard', view: 'flags'     },
+  '#/organiser/flags':      { route: 'organiser-dashboard', view: 'flags'      },
+  '#/organiser/checklist':  { route: 'organiser-dashboard', view: 'checklist'  },
+  '#/organiser/athletes':   { route: 'organiser-dashboard', view: 'athletes'   },
   '#/staff':               { route: 'staff-dashboard',     view: null           },
   '#/admin':               { route: 'super-admin',         view: null           },
   '#/parent':              { route: 'parent',              view: null           },
