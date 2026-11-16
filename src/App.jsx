@@ -2866,7 +2866,14 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
   const isRelevant = (student, actName) => {
     const entry = activityCombos[actName];
     if (!entry) return false;
-    return entry.combos.has(`${student.age_group}|${student.gender}`);
+    // Standard demographic match
+    if (entry.combos.has(`${student.age_group}|${student.gender}`)) return true;
+    // FK-linked result exists for this student — relevant even if age group doesn't match
+    // (e.g. U13 student in a "U14 Open" combined event)
+    for (const eaId of entry.ids) {
+      if (results.has(`${student.id}|ea:${eaId}`)) return true;
+    }
+    return false;
   };
 
   // Check if a student has trial data for an activity — prefer FK match, fall back to name match
