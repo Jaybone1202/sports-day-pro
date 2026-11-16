@@ -2946,9 +2946,49 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Student Completion Checklist</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Who has trial data for each event activity</p>
         </div>
-        <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
-          <Printer size={15}/> Print
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => {
+            // Use all students when no filter applied; filtered set when a filter is active
+            const filterActive = filterAgeGroup !== 'All' || filterGender !== 'All';
+            const printStudents = filterActive ? filteredStudents : [...(students || [])].sort((a,b) => {
+              const ag = (a.age_group||'').localeCompare(b.age_group||'',undefined,{numeric:true});
+              if (ag !== 0) return ag;
+              return (a.last_name||'').localeCompare(b.last_name||'');
+            });
+            // Build class-grouped print view
+            const classes = [...new Set(printStudents.map(s => s.class || 'No Class').filter(Boolean))].sort();
+            const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const sections = classes.map((cls, ci) => {
+              const classStudents = printStudents.filter(s => (s.class || 'No Class') === cls);
+              const relevantActs = activityNames.filter(a => classStudents.some(s => isRelevant(s, a)));
+              if (classStudents.length === 0) return '';
+              const headerRow = relevantActs.map(a => `<th style="padding:4px 6px;border:1px solid #ccc;font-size:10px;text-align:center;max-width:80px;word-break:break-word">${escHtml(a)}</th>`).join('');
+              const bodyRows = classStudents.map(student => {
+                const cells = relevantActs.map(a => {
+                  if (!isRelevant(student, a)) return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:#f8f8f8;color:#ccc">—</td>`;
+                  const has = hasResult(student, a);
+                  return has
+                    ? `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:#f0fdf4;color:#16a34a;font-weight:bold">✓</td>`
+                    : `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;color:#d1d5db">✗</td>`;
+                }).join('');
+                return `<tr><td style="padding:3px 8px;border:1px solid #eee;white-space:nowrap;font-weight:500">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td style="padding:3px 6px;border:1px solid #eee;color:#666">${escHtml(student.age_group||'')}</td>${cells}</tr>`;
+              }).join('');
+              const pageBreak = ci < classes.length - 1 ? 'page-break-after:always;' : '';
+              return `<div style="${pageBreak}padding-bottom:16px"><h2 style="font-size:14px;font-weight:bold;margin:0 0 4px 0;padding:6px 8px;background:#f1f5f9;border-radius:4px">Class: ${escHtml(cls)} <span style="font-weight:normal;font-size:11px;color:#666">(${classStudents.length} students)</span></h2><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:4px 8px;border:1px solid #ccc;text-align:left;font-size:11px">Student</th><th style="padding:4px 6px;border:1px solid #ccc;font-size:10px">Group</th>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+            }).join('');
+            const win = window.open('', '_blank', 'width=900,height=700');
+            if (!win) return;
+            win.document.write(`<!DOCTYPE html><html><head><title>Checklist by Class</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}@media print{body{padding:0}}</style></head><body><h1 style="font-size:16px;margin:0 0 12px 0">Sports Day — Student Completion Checklist by Class</h1>${sections}</body></html>`);
+            win.document.close();
+            win.focus();
+            setTimeout(() => { win.print(); }, 400);
+          }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Printer size={15}/> Print by Class
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Printer size={15}/> Print
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap hide-on-print">
@@ -3145,9 +3185,69 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Athletes List</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Top athletes per event activity, ranked by trial result</p>
         </div>
-        <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
-          <Printer size={15}/> Print
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => {
+            // Compute ranked + selected athletes for every EA
+            const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
+            const eaAthletes = {};
+            (eventActivities || []).forEach(ea => {
+              const higherIsBetter = ea.higher_is_better !== false;
+              const ranked = (results || [])
+                .filter(r => r.event_activity_id ? r.event_activity_id === ea.id : (r.activity_name === ea.name && studentMap[r.student_id]?.age_group === ea.age_group && studentMap[r.student_id]?.gender === ea.gender))
+                .map(r => ({ ...r, student: studentMap[r.student_id] }))
+                .filter(r => r.student)
+                .reduce((acc, r) => {
+                  const ex = acc.find(x => x.student_id === r.student_id);
+                  if (!ex) { acc.push(r); return acc; }
+                  const better = higherIsBetter ? (parseFloat(r.result_value)||0) > (parseFloat(ex.result_value)||0) : (parseFloat(r.result_value)||0) < (parseFloat(ex.result_value)||0);
+                  if (better) acc[acc.indexOf(ex)] = r;
+                  return acc;
+                }, [])
+                .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
+              const limit = ea.participants_per_house || null;
+              const houseCounts = {};
+              eaAthletes[ea.id] = ranked.map(r => {
+                const house = r.student?.house || 'Unknown';
+                houseCounts[house] = (houseCounts[house] || 0) + 1;
+                const houseRank = houseCounts[house];
+                return { ...r, selected: limit ? houseRank <= limit : true, houseRank: limit ? houseRank : null };
+              });
+            });
+            // Build class sections
+            const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].sort();
+            const sections = allClasses.map((cls, ci) => {
+              const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
+              // Find events where at least one class student appears
+              const relevantEas = (eventActivities||[]).filter(ea => eaAthletes[ea.id]?.some(r => r.student?.class === cls || (!r.student?.class && cls === 'No Class')));
+              if (relevantEas.length === 0) return '';
+              const pageBreak = ci < allClasses.length - 1 ? 'page-break-after:always;' : '';
+              const rows = classStudents.map(student => {
+                const eventCells = relevantEas.map(ea => {
+                  const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
+                  if (!entry) return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;color:#ccc">—</td>`;
+                  const sel = entry.selected;
+                  const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
+                  const rank = eaAthletes[ea.id].indexOf(entry) + 1;
+                  return `<td style="padding:3px 6px;border:1px solid #eee;text-align:center;background:${sel?'#f0fdf4':'#fafafa'};color:${sel?'#16a34a':'#9ca3af'};font-size:10px"><div style="font-weight:bold">${sel?'✓':rank}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
+                }).join('');
+                return `<tr><td style="padding:3px 8px;border:1px solid #eee;white-space:nowrap;font-weight:500">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td style="padding:3px 6px;border:1px solid #eee;color:#666;font-size:10px">${escHtml(student.house||'')}</td>${eventCells}</tr>`;
+              }).join('');
+              const headers = relevantEas.map(ea => `<th style="padding:4px 6px;border:1px solid #ccc;font-size:9px;text-align:center;max-width:72px;word-break:break-word">${escHtml(ea.name)}<br/><span style="font-weight:normal;color:#666">${escHtml(ea.age_group)} ${escHtml(ea.gender)}</span></th>`).join('');
+              return `<div style="${pageBreak}padding-bottom:16px"><h2 style="font-size:14px;font-weight:bold;margin:0 0 4px 0;padding:6px 8px;background:#f1f5f9;border-radius:4px">Class: ${escHtml(cls)} <span style="font-weight:normal;font-size:11px;color:#666">(${classStudents.length} students)</span></h2><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:4px 8px;border:1px solid #ccc;text-align:left">Student</th><th style="padding:4px 6px;border:1px solid #ccc;font-size:10px">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p style="font-size:9px;color:#666;margin:4px 0 0">✓ = selected for event &nbsp;|&nbsp; number = overall rank &nbsp;|&nbsp; — = not in this event</p></div>`;
+            }).filter(Boolean).join('');
+            const win = window.open('', '_blank', 'width=1000,height=700');
+            if (!win) return;
+            win.document.write(`<!DOCTYPE html><html><head><title>Athletes by Class</title><style>body{font-family:Arial,sans-serif;padding:16px;color:#111}@media print{body{padding:0}}</style></head><body><h1 style="font-size:16px;margin:0 0 12px 0">Sports Day — Athletes List by Class</h1>${sections}</body></html>`);
+            win.document.close(); win.focus();
+            setTimeout(() => { win.print(); }, 400);
+          }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Printer size={15}/> Print by Class
+          </button>
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
+            <Printer size={15}/> Print
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2 flex-wrap hide-on-print">
