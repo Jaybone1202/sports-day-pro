@@ -2788,53 +2788,72 @@ const OrganiserTrialsModule = ({ user, showToast }) => (
 );
 
 // ==========================================
-// CHECKLIST MODULE — student completion per trial activity
+// CHECKLIST MODULE — student completion per event activity
 // ==========================================
 const ChecklistModule = ({ user, showToast, onBack }) => {
-  const [trials, setTrials]               = useState([]);
-  const [selectedTrialId, setSelectedTrialId] = useState('');
-  const [students, setStudents]           = useState([]);
-  const [sessions, setSessions]           = useState([]);
-  const [results, setResults]             = useState([]);
-  const [filterAgeGroup, setFilterAgeGroup] = useState('All');
-  const [filterGender, setFilterGender]   = useState('All');
-  const [isLoading, setIsLoading]         = useState(false);
+  const [eventActivities, setEventActivities] = useState([]);
+  const [students, setStudents]               = useState([]);
+  const [results, setResults]                 = useState([]);
+  const [filterAgeGroup, setFilterAgeGroup]   = useState('All');
+  const [filterGender, setFilterGender]       = useState('All');
+  const [isLoading, setIsLoading]             = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase.from('trials').select('id, name').eq('school_id', user.school_id).order('created_at', { ascending: false });
-      setTrials(data || []);
-      if (data?.length) setSelectedTrialId(data[0].id);
-    };
-    load();
-  }, [user]);
-
-  useEffect(() => {
-    if (!selectedTrialId) return;
     const load = async () => {
       setIsLoading(true);
       try {
-        const [{ data: stuData }, { data: sesData }, { data: resData }] = await Promise.all([
-          supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
-          supabase.from('trial_activity_sessions').select('activity_name, filters_json').eq('trial_id', selectedTrialId),
-          supabase.from('trial_results').select('student_id, activity_name').eq('trial_id', selectedTrialId),
+        const { data: evData } = await supabase.from('events').select('id').eq('school_id', user.school_id);
+        const eventIds = (evData || []).map(e => e.id);
+        const { data: trialData } = await supabase.from('trials').select('id').eq('school_id', user.school_id);
+        const trialIds = (trialData || []).map(t => t.id);
+        const [{ data: eaData }, { data: stuData }, { data: resData }] = await Promise.all([
+          eventIds.length
+            ? supabase.from('event_activities').select('id, name, age_group, gender').in('event_id', eventIds)
+            : Promise.resolve({ data: [] }),
+          supabase.from('students').select('id, first_name, last_name, class, age_group, gender').eq('school_id', user.school_id),
+          trialIds.length
+            ? supabase.from('trial_results').select('student_id, activity_name').in('trial_id', trialIds)
+            : Promise.resolve({ data: [] }),
         ]);
+        setEventActivities(eaData || []);
         setStudents(stuData || []);
-        setSessions(sesData || []);
         setResults(resData || []);
       } catch (e) { if (showToast) showToast('Failed to load checklist data', 'error'); }
       finally { setIsLoading(false); }
     };
     load();
-  }, [selectedTrialId, user]);
+  }, [user]);
 
+  // unique activity names (columns)
+  const activityNames = React.useMemo(() => {
+    const seen = new Set();
+    const names = [];
+    (eventActivities || []).forEach(ea => { if (!seen.has(ea.name)) { seen.add(ea.name); names.push(ea.name); } });
+    return names.sort();
+  }, [eventActivities]);
+
+  // set of "studentId|activityName" that have trial results
   const resultSet = React.useMemo(() => {
     const s = new Set();
     (results || []).forEach(r => s.add(`${r.student_id}|${r.activity_name}`));
     return s;
   }, [results]);
 
-  const activities = React.useMemo(() => (sessions || []).map(s => s.activity_name), [sessions]);
+  // for each activity name, which age_group+gender combos exist in event_activities
+  const activityCombos = React.useMemo(() => {
+    const map = {};
+    (eventActivities || []).forEach(ea => {
+      if (!map[ea.name]) map[ea.name] = new Set();
+      map[ea.name].add(`${ea.age_group}|${ea.gender}`);
+    });
+    return map;
+  }, [eventActivities]);
+
+  const isRelevant = (student, actName) => {
+    const combos = activityCombos[actName];
+    if (!combos) return false;
+    return combos.has(`${student.age_group}|${student.gender}`);
+  };
 
   const filteredStudents = React.useMemo(() => {
     return (students || []).filter(s => {
@@ -2866,7 +2885,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
         </button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Student Completion Checklist</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Who has trial data for each event</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Who has trial data for each event activity</p>
         </div>
         <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
           <Printer size={15}/> Print
@@ -2874,10 +2893,6 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
       </div>
 
       <div className="flex gap-2 flex-wrap hide-on-print">
-        <select value={selectedTrialId} onChange={e => setSelectedTrialId(e.target.value)} className={selectClass}>
-          <option value="">— Select trial —</option>
-          {trials.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
         <select value={filterAgeGroup} onChange={e => setFilterAgeGroup(e.target.value)} className={selectClass}>
           {ageGroups.map(ag => <option key={ag} value={ag}>{ag === 'All' ? 'All age groups' : ag}</option>)}
         </select>
@@ -2888,10 +2903,11 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
 
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-slate-300" size={28}/></div>
-      ) : !selectedTrialId ? (
+      ) : activityNames.length === 0 ? (
         <div className="text-center py-16 text-slate-400">
           <ClipboardList size={40} className="mx-auto mb-3 opacity-30"/>
-          <p className="font-semibold">Select a trial to view the checklist</p>
+          <p className="font-semibold">No event activities found</p>
+          <p className="text-sm mt-1">Add event activities in the Planning section first</p>
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -2901,26 +2917,33 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
                 <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200 whitespace-nowrap">Student</th>
                 <th className="px-3 py-3 text-left font-semibold text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Class</th>
                 <th className="px-3 py-3 text-left font-semibold text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Age Group</th>
-                {activities.map(a => (
-                  <th key={a} className="px-3 py-3 text-center font-semibold text-xs text-slate-600 dark:text-slate-300">
-                    <div className="whitespace-nowrap">{a}</div>
-                    <div className="text-emerald-600 dark:text-emerald-400 font-normal font-mono mt-0.5">
-                      {results.filter(r => r.activity_name === a && filteredStudents.some(s => s.id === r.student_id)).length}
-                      <span className="text-slate-400">/{filteredStudents.length}</span>
-                    </div>
-                  </th>
-                ))}
+                {activityNames.map(a => {
+                  const eligible = filteredStudents.filter(s => isRelevant(s, a));
+                  const done = eligible.filter(s => resultSet.has(`${s.id}|${a}`)).length;
+                  const allDone = eligible.length > 0 && done === eligible.length;
+                  return (
+                    <th key={a} className="px-3 py-3 text-center font-semibold text-xs text-slate-600 dark:text-slate-300">
+                      <div className="whitespace-nowrap">{a}</div>
+                      <div className={`font-normal font-mono mt-0.5 ${allDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-500 dark:text-amber-400'}`}>
+                        {done}<span className="text-slate-400">/{eligible.length}</span>
+                      </div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
               {filteredStudents.length === 0 ? (
-                <tr><td colSpan={3 + activities.length} className="text-center py-10 text-slate-400">No students match the current filter.</td></tr>
+                <tr><td colSpan={3 + activityNames.length} className="text-center py-10 text-slate-400">No students match the current filter.</td></tr>
               ) : filteredStudents.map(student => (
                 <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/20 transition-colors">
                   <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-white whitespace-nowrap">{student.last_name}, {student.first_name}</td>
                   <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{student.class}</td>
                   <td className="px-3 py-2.5 text-slate-500 dark:text-slate-400">{student.age_group}</td>
-                  {activities.map(a => {
+                  {activityNames.map(a => {
+                    if (!isRelevant(student, a)) {
+                      return <td key={a} className="px-3 py-2.5 text-center bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 text-xs">—</td>;
+                    }
                     const has = resultSet.has(`${student.id}|${a}`);
                     return (
                       <td key={a} className={`px-3 py-2.5 text-center ${has ? 'bg-emerald-50 dark:bg-emerald-900/10' : ''}`}>
@@ -2937,63 +2960,57 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
         </div>
       )}
       <p className="text-xs text-slate-400 hide-on-print">
-        {filteredStudents.length} students · {activities.length} activities · {results.length} total records in this trial
+        {filteredStudents.length} students · {activityNames.length} event activities · {results.length} total trial records
       </p>
     </div>
   );
 };
 
 // ==========================================
-// ATHLETES LIST MODULE — ranked results per activity for pre-event selection
+// ATHLETES LIST MODULE — ranked athletes per event activity with selection cutoff
 // ==========================================
 const AthletesListModule = ({ user, showToast, onBack }) => {
-  const [trials, setTrials]               = useState([]);
-  const [selectedTrialId, setSelectedTrialId] = useState('');
-  const [sessions, setSessions]           = useState([]);
-  const [selectedActivity, setSelectedActivity] = useState('');
-  const [students, setStudents]           = useState([]);
-  const [results, setResults]             = useState([]);
-  const [filterAgeGroup, setFilterAgeGroup] = useState('All');
-  const [filterGender, setFilterGender]   = useState('All');
-  const [isLoading, setIsLoading]         = useState(false);
-  const [houseColors, setHouseColors]     = useState({});
+  const [eventActivities, setEventActivities] = useState([]);
+  const [selectedEaId, setSelectedEaId]       = useState('');
+  const [students, setStudents]               = useState([]);
+  const [results, setResults]                 = useState([]);
+  const [houseColors, setHouseColors]         = useState({});
+  const [houseCount, setHouseCount]           = useState(0);
+  const [isLoading, setIsLoading]             = useState(false);
 
   useEffect(() => {
-    const load = async () => {
-      const [{ data: trialData }, { data: hcData }] = await Promise.all([
-        supabase.from('trials').select('id, name').eq('school_id', user.school_id).order('created_at', { ascending: false }),
-        supabase.from('school_houses').select('*').eq('school_id', user.school_id),
-      ]);
-      setTrials(trialData || []);
-      if (trialData?.length) setSelectedTrialId(trialData[0].id);
-      const map = {};
-      (hcData || []).forEach(h => { map[h.house_name] = h.house_color; });
-      setHouseColors(map);
-    };
-    load();
-  }, [user]);
-
-  useEffect(() => {
-    if (!selectedTrialId) return;
     const load = async () => {
       setIsLoading(true);
       try {
-        const [{ data: sesData }, { data: stuData }, { data: resData }] = await Promise.all([
-          supabase.from('trial_activity_sessions').select('activity_name, filters_json, scoring_mode').eq('trial_id', selectedTrialId),
+        const { data: evData } = await supabase.from('events').select('id').eq('school_id', user.school_id);
+        const eventIds = (evData || []).map(e => e.id);
+        const { data: trialData } = await supabase.from('trials').select('id').eq('school_id', user.school_id);
+        const trialIds = (trialData || []).map(t => t.id);
+        const [{ data: eaData }, { data: stuData }, { data: resData }, { data: hcData }] = await Promise.all([
+          eventIds.length
+            ? supabase.from('event_activities').select('id, name, age_group, gender, participants_per_house, higher_is_better, unit').in('event_id', eventIds).order('name')
+            : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
-          supabase.from('trial_results').select('student_id, activity_name, result_value, unit').eq('trial_id', selectedTrialId),
+          trialIds.length
+            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit').in('trial_id', trialIds)
+            : Promise.resolve({ data: [] }),
+          supabase.from('school_houses').select('*').eq('school_id', user.school_id),
         ]);
-        setSessions(sesData || []);
+        setEventActivities(eaData || []);
         setStudents(stuData || []);
         setResults(resData || []);
-        if (sesData?.length) {
-          setSelectedActivity(prev => sesData.find(s => s.activity_name === prev) ? prev : (sesData[0]?.activity_name || ''));
-        }
+        const map = {};
+        (hcData || []).forEach(h => { map[h.house_name] = h.house_color; });
+        setHouseColors(map);
+        setHouseCount((hcData || []).length);
+        if (eaData?.length) setSelectedEaId(eaData[0].id);
       } catch (e) { if (showToast) showToast('Failed to load athletes data', 'error'); }
       finally { setIsLoading(false); }
     };
     load();
-  }, [selectedTrialId, user]);
+  }, [user]);
+
+  const selectedEa = React.useMemo(() => (eventActivities || []).find(ea => ea.id === selectedEaId), [eventActivities, selectedEaId]);
 
   const studentMap = React.useMemo(() => {
     const m = {};
@@ -3001,24 +3018,22 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
     return m;
   }, [students]);
 
-  const filteredResults = React.useMemo(() => {
-    if (!selectedActivity) return [];
+  const rankedAthletes = React.useMemo(() => {
+    if (!selectedEa) return [];
+    const higherIsBetter = selectedEa.higher_is_better !== false;
     return (results || [])
-      .filter(r => r.activity_name === selectedActivity)
+      .filter(r => r.activity_name === selectedEa.name)
       .map(r => ({ ...r, student: studentMap[r.student_id] }))
-      .filter(r => {
-        if (!r.student) return false;
-        if (filterAgeGroup !== 'All' && r.student.age_group !== filterAgeGroup) return false;
-        if (filterGender !== 'All' && r.student.gender !== filterGender) return false;
-        return true;
-      })
-      .sort((a, b) => (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0));
-  }, [results, selectedActivity, studentMap, filterAgeGroup, filterGender]);
+      .filter(r => r.student && r.student.age_group === selectedEa.age_group && r.student.gender === selectedEa.gender)
+      .sort((a, b) => higherIsBetter
+        ? (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0)
+        : (parseFloat(a.result_value) || 0) - (parseFloat(b.result_value) || 0)
+      );
+  }, [results, selectedEa, studentMap]);
 
-  const ageGroups = React.useMemo(() =>
-    ['All', ...[...new Set((students || []).map(s => s.age_group).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))],
-    [students]
-  );
+  const cutoff = selectedEa && selectedEa.participants_per_house && houseCount
+    ? selectedEa.participants_per_house * houseCount
+    : null;
 
   const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-sky-500";
 
@@ -3031,7 +3046,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         </button>
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Athletes List</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Students confirmed for each event, ranked by trial result</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Top athletes per event activity, ranked by trial result</p>
         </div>
         <button onClick={() => window.print()} className="ml-auto flex items-center gap-2 px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-colors">
           <Printer size={15}/> Print
@@ -3039,61 +3054,73 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
       </div>
 
       <div className="flex gap-2 flex-wrap hide-on-print">
-        <select value={selectedTrialId} onChange={e => setSelectedTrialId(e.target.value)} className={selectClass}>
-          <option value="">— Select trial —</option>
-          {trials.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <select value={selectedActivity} onChange={e => setSelectedActivity(e.target.value)} className={selectClass}>
-          <option value="">— Select activity —</option>
-          {sessions.map(s => <option key={s.activity_name} value={s.activity_name}>{s.activity_name}</option>)}
-        </select>
-        <select value={filterAgeGroup} onChange={e => setFilterAgeGroup(e.target.value)} className={selectClass}>
-          {ageGroups.map(ag => <option key={ag} value={ag}>{ag === 'All' ? 'All age groups' : ag}</option>)}
-        </select>
-        <select value={filterGender} onChange={e => setFilterGender(e.target.value)} className={selectClass}>
-          {['All', 'Boys', 'Girls'].map(g => <option key={g} value={g}>{g === 'All' ? 'All genders' : g}</option>)}
+        <select value={selectedEaId} onChange={e => setSelectedEaId(e.target.value)} className={selectClass}>
+          <option value="">— Select event activity —</option>
+          {(eventActivities || []).map(ea => (
+            <option key={ea.id} value={ea.id}>{ea.name} — {ea.age_group} {ea.gender}</option>
+          ))}
         </select>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="animate-spin text-slate-300" size={28}/></div>
-      ) : !selectedActivity ? (
+      ) : !selectedEa ? (
         <div className="text-center py-16 text-slate-400">
           <Trophy size={40} className="mx-auto mb-3 opacity-30"/>
-          <p className="font-semibold">Select a trial and activity to view the athletes list</p>
+          <p className="font-semibold">Select an event activity to view the athletes list</p>
         </div>
       ) : (
         <Card className="!p-0 overflow-hidden">
           <div className="px-5 py-3.5 bg-gradient-to-r from-slate-800 to-slate-700 dark:from-slate-700 dark:to-slate-600 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Trophy size={15} className="text-amber-400"/>
-              <span className="font-bold text-white text-sm">{selectedActivity}</span>
+              <span className="font-bold text-white text-sm">{selectedEa.name} — {selectedEa.age_group} {selectedEa.gender}</span>
             </div>
-            <span className="text-sm text-slate-400">{filteredResults.length} athlete{filteredResults.length !== 1 ? 's' : ''}</span>
+            <div className="flex items-center gap-3">
+              {cutoff && <span className="text-xs text-amber-300">{cutoff} spots ({selectedEa.participants_per_house}/house × {houseCount} houses)</span>}
+              <span className="text-sm text-slate-400">{rankedAthletes.length} athlete{rankedAthletes.length !== 1 ? 's' : ''}</span>
+            </div>
           </div>
-          {filteredResults.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-sm">No results for this filter.</div>
+          {rankedAthletes.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">No trial results found for this event activity.</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {filteredResults.map((r, idx) => (
-                <div key={r.student_id} className="flex items-center gap-3 px-5 py-3">
-                  <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{r.student.class} · {r.student.age_group} · {r.student.gender}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
-                  </div>
-                  <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm">{r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{r.unit ? ` ${r.unit}` : ''}</span>
-                </div>
-              ))}
+              {rankedAthletes.map((r, idx) => {
+                const isCutoffLine = cutoff !== null && idx === cutoff;
+                return (
+                  <React.Fragment key={r.student_id}>
+                    {isCutoffLine && (
+                      <div className="flex items-center gap-2 px-5 py-1.5 bg-amber-50 dark:bg-amber-900/20 border-y border-amber-200 dark:border-amber-700">
+                        <div className="flex-1 h-px bg-amber-300 dark:bg-amber-600"/>
+                        <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 whitespace-nowrap">Selection cutoff — {cutoff} spots</span>
+                        <div className="flex-1 h-px bg-amber-300 dark:bg-amber-600"/>
+                      </div>
+                    )}
+                    <div className={`flex items-center gap-3 px-5 py-3 ${cutoff !== null && idx >= cutoff ? 'opacity-50' : ''}`}>
+                      <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{r.student.class}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
+                        <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
+                      </div>
+                      <span className="font-bold font-mono text-slate-800 dark:text-slate-200 text-sm">
+                        {r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{(r.unit || selectedEa.unit) ? ` ${r.unit || selectedEa.unit}` : ''}
+                      </span>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
             </div>
           )}
         </Card>
       )}
-      <p className="text-xs text-slate-400 hide-on-print">{filteredResults.length} athletes listed · sorted by best result</p>
+      <p className="text-xs text-slate-400 hide-on-print">
+        {rankedAthletes.length} athletes listed · sorted by {selectedEa?.higher_is_better !== false ? 'best (highest)' : 'best (lowest)'} result
+        {cutoff ? ` · top ${cutoff} selected` : ''}
+      </p>
     </div>
   );
 };
