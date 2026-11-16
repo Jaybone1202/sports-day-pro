@@ -3495,8 +3495,8 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   // Load event activities for the trial event-link picker
   useEffect(() => {
     if (mode !== 'trials' || !selectedEventId) return;
-    supabase.from('event_activities').select('id, name, age_group, gender, unit, scoring_mode, num_attempts, heights_json').eq('event_id', selectedEventId).order('name')
-      .then(({ data }) => setTrialEventActivities(data || []));
+    supabase.from('event_activities').select('id, name, age_group, gender, unit').eq('event_id', selectedEventId).order('name')
+      .then(({ data, error }) => { if (!error) setTrialEventActivities(data || []); });
   }, [mode, selectedEventId]);
 
   const handleStartTrial = () => {
@@ -3763,9 +3763,6 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                               ageGroup: ea.age_group || f.ageGroup,
                               gender: ea.gender || f.gender,
                               unit: ea.unit || f.unit,
-                              scoringMode: ea.scoring_mode || f.scoringMode,
-                              numAttempts: ea.num_attempts || f.numAttempts,
-                              heights: ea.heights_json || f.heights,
                             }));
                           } else {
                             setTrialFilters(f => ({ ...f, eventActivityId: null, customActivityName: '' }));
