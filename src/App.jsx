@@ -2799,7 +2799,8 @@ const OrganiserTrialsModule = ({ user, showToast }) => (
 const ChecklistModule = ({ user, showToast, onBack }) => {
   const [eventActivities, setEventActivities] = useState([]);
   const [students, setStudents]               = useState([]);
-  const [results, setResults]                 = useState([]);
+  const [results, setResults]                 = useState(new Set());
+  const [eaSessionCoverage, setEaSessionCoverage] = useState({});
   const [filterAgeGroup, setFilterAgeGroup]   = useState('All');
   const [filterGender, setFilterGender]       = useState('All');
   const [isLoading, setIsLoading]             = useState(false);
@@ -2821,23 +2822,38 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
             ? supabase.from('trial_results').select('student_id, activity_name, trial_id').in('trial_id', trialIds)
             : Promise.resolve({ data: [] }),
           trialIds.length
-            ? supabase.from('trial_activity_sessions').select('trial_id, activity_name, event_activity_id').in('trial_id', trialIds).not('event_activity_id', 'is', null)
+            ? supabase.from('trial_activity_sessions').select('trial_id, activity_name, event_activity_id, filters_json').in('trial_id', trialIds).not('event_activity_id', 'is', null)
             : Promise.resolve({ data: [] }),
         ]);
         setEventActivities(eaData || []);
         setStudents(stuData || []);
-        // Build resultSet supporting both FK-linked and name-matched sessions
-        // sesMap: "trialId|activityName" -> event_activity_id
+        // sesMap: "trialId|activityName" -> { event_activity_id, ageGroup, gender }
         const sesMap = {};
-        (sesData || []).forEach(s => { sesMap[`${s.trial_id}|${s.activity_name}`] = s.event_activity_id; });
-        // resultSet: "studentId|eventActivityId" (FK) OR "studentId|activityName" (fallback)
+        (sesData || []).forEach(s => {
+          sesMap[`${s.trial_id}|${s.activity_name}`] = {
+            eaId: s.event_activity_id,
+            ageGroup: s.filters_json?.ageGroup || 'All',
+            gender: s.filters_json?.gender || 'All',
+          };
+        });
+        // resultSet: "studentId|ea:eaId" (FK) OR "studentId|name:actName" (fallback)
         const rSet = new Set();
         (resData || []).forEach(r => {
-          const eaId = sesMap[`${r.trial_id}|${r.activity_name}`];
-          if (eaId) rSet.add(`${r.student_id}|ea:${eaId}`);
+          const ses = sesMap[`${r.trial_id}|${r.activity_name}`];
+          if (ses?.eaId) rSet.add(`${r.student_id}|ea:${ses.eaId}`);
           else rSet.add(`${r.student_id}|name:${r.activity_name}`);
         });
         setResults(rSet);
+        // eaSessionCoverage: eaId -> Set of "ageGroup|gender" covered by linked trial sessions
+        // Used to mark students as relevant (×) even if they have no result yet
+        const coverage = {};
+        (sesData || []).forEach(s => {
+          if (!coverage[s.event_activity_id]) coverage[s.event_activity_id] = new Set();
+          const ag = s.filters_json?.ageGroup || 'All';
+          const g  = s.filters_json?.gender  || 'All';
+          coverage[s.event_activity_id].add(`${ag}|${g}`);
+        });
+        setEaSessionCoverage(coverage);
       } catch (e) { if (showToast) showToast('Failed to load checklist data', 'error'); }
       finally { setIsLoading(false); }
     };
@@ -2866,11 +2882,21 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
   const isRelevant = (student, actName) => {
     const entry = activityCombos[actName];
     if (!entry) return false;
-    // Standard demographic match
+    // Standard demographic match against event activity's own age_group/gender
     if (entry.combos.has(`${student.age_group}|${student.gender}`)) return true;
-    // FK-linked result exists for this student — relevant even if age group doesn't match
-    // (e.g. U13 student in a "U14 Open" combined event)
+    // Check trial session coverage: a linked session may cover a different age group
+    // (e.g. U13 session linked to a U14 Open activity) — student gets × not —
     for (const eaId of entry.ids) {
+      const covered = eaSessionCoverage[eaId];
+      if (covered) {
+        for (const combo of covered) {
+          const [ag, g] = combo.split('|');
+          const ageMatch = ag === 'All' || ag === student.age_group;
+          const genMatch = g  === 'All' || g  === student.gender;
+          if (ageMatch && genMatch) return true;
+        }
+      }
+      // Also relevant if they already have a FK-linked result
       if (results.has(`${student.id}|ea:${eaId}`)) return true;
     }
     return false;
