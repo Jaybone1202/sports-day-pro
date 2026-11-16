@@ -3792,7 +3792,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                         }}
                         className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm appearance-none pr-8">
                         <option value="">— Select event activity —</option>
-                        {sortedTrialEventActivities.filter(ea => !linkedEaIds.has(ea.id)).map(ea => (
+                        {sortedTrialEventActivities.map(ea => (
                           <option key={ea.id} value={ea.id}>{ea.age_group} {ea.gender} — {ea.name}</option>
                         ))}
                       </select>
@@ -3935,7 +3935,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                                     onChange={e => { if (e.target.value) saveLinkHistorySession(item, e.target.value); }}
                                     className="text-xs px-2 py-1.5 border border-purple-300 dark:border-purple-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white outline-none max-w-[180px]">
                                     <option value="" disabled>Pick event activity…</option>
-                                    {sortedTrialEventActivities.filter(ea => !linkedEaIds.has(ea.id) || ea.id === item.savedFilters?.eventActivityId).map(ea => (
+                                    {sortedTrialEventActivities.map(ea => (
                                       <option key={ea.id} value={ea.id}>{ea.age_group} {ea.gender} — {ea.name}</option>
                                     ))}
                                   </select>
