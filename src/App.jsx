@@ -2979,41 +2979,40 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
             if (!win) return;
             const printDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
             const css = `
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
               *{box-sizing:border-box;margin:0;padding:0}
-              body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
+              body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
               .doc-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #0ea5e9;padding-bottom:10px;margin-bottom:20px}
               .doc-title{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px}
               .doc-sub{font-size:11px;color:#64748b;margin-top:2px}
               .doc-meta{text-align:right;font-size:10px;color:#94a3b8}
-              .class-block{margin-bottom:0}
-              .class-header{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#0ea5e9 0%,#38bdf8 100%);color:#fff;padding:7px 12px;border-radius:6px 6px 0 0;margin-bottom:0}
+              .class-block{margin-bottom:16px}
+              .class-header{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#0ea5e9 0%,#38bdf8 100%);color:#fff;padding:7px 12px;border-radius:6px 6px 0 0}
               .class-name{font-size:13px;font-weight:700;letter-spacing:0.2px}
               .class-count{font-size:10px;opacity:0.85;margin-left:auto}
-              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 6px 6px;overflow:hidden}
+              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none}
               thead tr{background:#f8fafc}
               th{padding:5px 7px;border:1px solid #e2e8f0;font-size:9.5px;font-weight:600;color:#475569;text-align:center;vertical-align:bottom;line-height:1.3}
               th.name-col{text-align:left;min-width:110px}
               th.grp-col{min-width:46px}
-              td{padding:4px 7px;border:1px solid #f1f5f9;vertical-align:middle}
+              td{padding:4px 7px;border:1px solid #e8edf2;vertical-align:middle}
               tr:nth-child(even) td{background:#f8fafc}
               td.name-col{font-weight:600;white-space:nowrap;color:#0f172a}
               td.grp-col{text-align:center;color:#64748b;font-size:10px}
               td.tick{text-align:center}
-              td.tick.done{background:#f0fdf4;color:#16a34a;font-weight:700;font-size:13px}
+              td.tick.done{background:#dcfce7;color:#15803d;font-weight:700;font-size:13px}
               td.tick.miss{background:#fff;color:#cbd5e1;font-size:12px}
               td.tick.na{background:#f8fafc;color:#cbd5e1;font-size:11px}
-              .legend{font-size:9px;color:#94a3b8;margin-top:6px}
+              .legend{font-size:9px;color:#94a3b8;margin-top:5px;padding:0 2px}
               @media print{
                 body{padding:10px}
                 .page-break{page-break-after:always}
                 @page{margin:12mm 10mm}
               }
             `;
-            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Checklist by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Student Completion Checklist</div><div class="doc-sub">Sports Day — by Class${filterActive?' · Filtered view':''}</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections}</body></html>`);
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Checklist by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Student Completion Checklist</div><div class="doc-sub">Sports Day — by Class${filterActive?' · Filtered view':''}</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections || '<p style="color:#94a3b8;padding:20px">No student data found.</p>'}</body></html>`);
             win.document.close();
             win.focus();
-            setTimeout(() => { win.print(); }, 400);
+            win.onload = () => win.print();
           }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
             <Printer size={15}/> Print by Class
           </button>
@@ -3277,40 +3276,39 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             if (!win) return;
             const printDate = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
             const css = `
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
               *{box-sizing:border-box;margin:0;padding:0}
-              body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
+              body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#fff;color:#1e293b;padding:24px;font-size:11px}
               .doc-header{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:3px solid #f59e0b;padding-bottom:10px;margin-bottom:20px}
               .doc-title{font-size:20px;font-weight:700;color:#0f172a;letter-spacing:-0.3px}
               .doc-sub{font-size:11px;color:#64748b;margin-top:2px}
               .doc-meta{text-align:right;font-size:10px;color:#94a3b8}
-              .class-block{margin-bottom:0}
+              .class-block{margin-bottom:16px}
               .class-header{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,#d97706 0%,#f59e0b 100%);color:#fff;padding:7px 12px;border-radius:6px 6px 0 0}
               .class-name{font-size:13px;font-weight:700;letter-spacing:0.2px}
               .class-count{font-size:10px;opacity:0.9;margin-left:auto}
-              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none;margin-bottom:12px}
+              table{width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-top:none}
               thead tr{background:#f8fafc}
               th{padding:5px 7px;border:1px solid #e2e8f0;font-size:9.5px;font-weight:600;color:#475569;text-align:center;vertical-align:bottom;line-height:1.3}
               th.name-col{text-align:left;min-width:110px}
               th.grp-col{min-width:46px}
-              td{padding:4px 7px;border:1px solid #f1f5f9;vertical-align:middle}
-              tr:nth-child(even) td{background:#fafafa}
+              td{padding:4px 7px;border:1px solid #e8edf2;vertical-align:middle}
+              tr:nth-child(even) td{background:#f8fafc}
               td.name-col{font-weight:600;white-space:nowrap;color:#0f172a}
               td.grp-col{text-align:center;color:#64748b;font-size:10px}
               td.tick{text-align:center;vertical-align:middle}
-              td.tick.done{background:#f0fdf4;color:#16a34a;font-weight:700}
+              td.tick.done{background:#dcfce7;color:#15803d;font-weight:700}
               td.tick.miss{background:#fff;color:#94a3b8}
               td.tick.na{background:#f8fafc;color:#cbd5e1}
-              .legend{font-size:9px;color:#94a3b8;margin:4px 0 16px}
+              .legend{font-size:9px;color:#94a3b8;margin:5px 0 0;padding:0 2px}
               @media print{
                 body{padding:10px}
                 .page-break{page-break-after:always}
                 @page{margin:12mm 10mm}
               }
             `;
-            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Athletes by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Athletes List</div><div class="doc-sub">Sports Day — by Class</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections}</body></html>`);
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Athletes by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Athletes List</div><div class="doc-sub">Sports Day — by Class</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections || '<p style="color:#94a3b8;padding:20px">No athlete data found.</p>'}</body></html>`);
             win.document.close(); win.focus();
-            setTimeout(() => { win.print(); }, 400);
+            win.onload = () => win.print();
           }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
             <Printer size={15}/> Print by Class
           </button>
