@@ -2806,25 +2806,39 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
         const eventIds = (evData || []).map(e => e.id);
         const { data: trialData } = await supabase.from('trials').select('id').eq('school_id', user.school_id);
         const trialIds = (trialData || []).map(t => t.id);
-        const [{ data: eaData }, { data: stuData }, { data: resData }] = await Promise.all([
+        const [{ data: eaData }, { data: stuData }, { data: resData }, { data: sesData }] = await Promise.all([
           eventIds.length
             ? supabase.from('event_activities').select('id, name, age_group, gender').in('event_id', eventIds)
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender').eq('school_id', user.school_id),
           trialIds.length
-            ? supabase.from('trial_results').select('student_id, activity_name').in('trial_id', trialIds)
+            ? supabase.from('trial_results').select('student_id, activity_name, trial_id').in('trial_id', trialIds)
+            : Promise.resolve({ data: [] }),
+          trialIds.length
+            ? supabase.from('trial_activity_sessions').select('trial_id, activity_name, event_activity_id').in('trial_id', trialIds).not('event_activity_id', 'is', null)
             : Promise.resolve({ data: [] }),
         ]);
         setEventActivities(eaData || []);
         setStudents(stuData || []);
-        setResults(resData || []);
+        // Build resultSet supporting both FK-linked and name-matched sessions
+        // sesMap: "trialId|activityName" -> event_activity_id
+        const sesMap = {};
+        (sesData || []).forEach(s => { sesMap[`${s.trial_id}|${s.activity_name}`] = s.event_activity_id; });
+        // resultSet: "studentId|eventActivityId" (FK) OR "studentId|activityName" (fallback)
+        const rSet = new Set();
+        (resData || []).forEach(r => {
+          const eaId = sesMap[`${r.trial_id}|${r.activity_name}`];
+          if (eaId) rSet.add(`${r.student_id}|ea:${eaId}`);
+          else rSet.add(`${r.student_id}|name:${r.activity_name}`);
+        });
+        setResults(rSet);
       } catch (e) { if (showToast) showToast('Failed to load checklist data', 'error'); }
       finally { setIsLoading(false); }
     };
     load();
   }, [user]);
 
-  // unique activity names (columns)
+  // unique activity names (columns) — ordered by name
   const activityNames = React.useMemo(() => {
     const seen = new Set();
     const names = [];
@@ -2832,27 +2846,33 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
     return names.sort();
   }, [eventActivities]);
 
-  // set of "studentId|activityName" that have trial results
-  const resultSet = React.useMemo(() => {
-    const s = new Set();
-    (results || []).forEach(r => s.add(`${r.student_id}|${r.activity_name}`));
-    return s;
-  }, [results]);
-
-  // for each activity name, which age_group+gender combos exist in event_activities
+  // for each activity name, which age_group+gender combos + ea ids exist
   const activityCombos = React.useMemo(() => {
     const map = {};
     (eventActivities || []).forEach(ea => {
-      if (!map[ea.name]) map[ea.name] = new Set();
-      map[ea.name].add(`${ea.age_group}|${ea.gender}`);
+      if (!map[ea.name]) map[ea.name] = { combos: new Set(), ids: [] };
+      map[ea.name].combos.add(`${ea.age_group}|${ea.gender}`);
+      map[ea.name].ids.push(ea.id);
     });
     return map;
   }, [eventActivities]);
 
   const isRelevant = (student, actName) => {
-    const combos = activityCombos[actName];
-    if (!combos) return false;
-    return combos.has(`${student.age_group}|${student.gender}`);
+    const entry = activityCombos[actName];
+    if (!entry) return false;
+    return entry.combos.has(`${student.age_group}|${student.gender}`);
+  };
+
+  // Check if a student has trial data for an activity — prefer FK match, fall back to name match
+  const hasResult = (student, actName) => {
+    const entry = activityCombos[actName];
+    if (!entry) return false;
+    // FK match: check if student has result linked to any of this activity's event_activity ids
+    for (const eaId of entry.ids) {
+      if ((results).has(`${student.id}|ea:${eaId}`)) return true;
+    }
+    // Name fallback for sessions not yet linked
+    return (results).has(`${student.id}|name:${actName}`);
   };
 
   const filteredStudents = React.useMemo(() => {
@@ -2919,7 +2939,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
                 <th className="px-3 py-3 text-left font-semibold text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Age Group</th>
                 {activityNames.map(a => {
                   const eligible = filteredStudents.filter(s => isRelevant(s, a));
-                  const done = eligible.filter(s => resultSet.has(`${s.id}|${a}`)).length;
+                  const done = eligible.filter(s => hasResult(s, a)).length;
                   const allDone = eligible.length > 0 && done === eligible.length;
                   return (
                     <th key={a} className="px-3 py-3 text-center font-semibold text-xs text-slate-600 dark:text-slate-300">
@@ -2944,7 +2964,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
                     if (!isRelevant(student, a)) {
                       return <td key={a} className="px-3 py-2.5 text-center bg-slate-50 dark:bg-slate-700/30 text-slate-300 dark:text-slate-600 text-xs">—</td>;
                     }
-                    const has = resultSet.has(`${student.id}|${a}`);
+                    const has = hasResult(student, a);
                     return (
                       <td key={a} className={`px-3 py-2.5 text-center ${has ? 'bg-emerald-50 dark:bg-emerald-900/10' : ''}`}>
                         {has
@@ -2960,7 +2980,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
         </div>
       )}
       <p className="text-xs text-slate-400 hide-on-print">
-        {filteredStudents.length} students · {activityNames.length} event activities · {results.length} total trial records
+        {filteredStudents.length} students · {activityNames.length} event activities · {results.size} total trial records
       </p>
     </div>
   );
@@ -2986,19 +3006,26 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         const eventIds = (evData || []).map(e => e.id);
         const { data: trialData } = await supabase.from('trials').select('id').eq('school_id', user.school_id);
         const trialIds = (trialData || []).map(t => t.id);
-        const [{ data: eaData }, { data: stuData }, { data: resData }, { data: hcData }] = await Promise.all([
+        const [{ data: eaData }, { data: stuData }, { data: resData }, { data: hcData }, { data: sesData }] = await Promise.all([
           eventIds.length
             ? supabase.from('event_activities').select('id, name, age_group, gender, participants_per_house, higher_is_better, unit').in('event_id', eventIds).order('name')
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
           trialIds.length
-            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit').in('trial_id', trialIds)
+            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit, trial_id').in('trial_id', trialIds)
             : Promise.resolve({ data: [] }),
           supabase.from('school_houses').select('*').eq('school_id', user.school_id),
+          trialIds.length
+            ? supabase.from('trial_activity_sessions').select('trial_id, activity_name, event_activity_id').in('trial_id', trialIds).not('event_activity_id', 'is', null)
+            : Promise.resolve({ data: [] }),
         ]);
         setEventActivities(eaData || []);
         setStudents(stuData || []);
-        setResults(resData || []);
+        // sesMap: "trialId|activityName" -> event_activity_id
+        const sesMap = {};
+        (sesData || []).forEach(s => { sesMap[`${s.trial_id}|${s.activity_name}`] = s.event_activity_id; });
+        // Enrich results with event_activity_id from sessions
+        setResults((resData || []).map(r => ({ ...r, event_activity_id: sesMap[`${r.trial_id}|${r.activity_name}`] || null })));
         const map = {};
         (hcData || []).forEach(h => { map[h.house_name] = h.house_color; });
         setHouseColors(map);
@@ -3022,9 +3049,31 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
     if (!selectedEa) return [];
     const higherIsBetter = selectedEa.higher_is_better !== false;
     return (results || [])
-      .filter(r => r.activity_name === selectedEa.name)
+      // FK match first; fall back to name + age_group + gender matching for unlinked sessions
+      .filter(r => r.event_activity_id
+        ? r.event_activity_id === selectedEa.id
+        : r.activity_name === selectedEa.name
+      )
       .map(r => ({ ...r, student: studentMap[r.student_id] }))
-      .filter(r => r.student && r.student.age_group === selectedEa.age_group && r.student.gender === selectedEa.gender)
+      .filter(r => {
+        if (!r.student) return false;
+        // For FK-linked results the session was explicitly tied — still verify demographics as a safeguard
+        // For name-matched results we must check age_group + gender
+        if (!r.event_activity_id) {
+          if (r.student.age_group !== selectedEa.age_group || r.student.gender !== selectedEa.gender) return false;
+        }
+        return true;
+      })
+      // De-duplicate: keep best score per student
+      .reduce((acc, r) => {
+        const existing = acc.find(x => x.student_id === r.student_id);
+        if (!existing) { acc.push(r); return acc; }
+        const better = higherIsBetter
+          ? (parseFloat(r.result_value) || 0) > (parseFloat(existing.result_value) || 0)
+          : (parseFloat(r.result_value) || 0) < (parseFloat(existing.result_value) || 0);
+        if (better) { acc[acc.indexOf(existing)] = r; }
+        return acc;
+      }, [])
       .sort((a, b) => higherIsBetter
         ? (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0)
         : (parseFloat(a.result_value) || 0) - (parseFloat(b.result_value) || 0)
@@ -3329,7 +3378,8 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const [selectedEventId, setSelectedEventId]   = useState(() => localStorage.getItem('sdp-staff-event') || '');
   const [allTrials, setAllTrials]               = useState([]);
   const [selectedTrialId, setSelectedTrialId]   = useState('');
-  const [trialFilters, setTrialFilters]         = useState({ ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: '', unit: 'seconds', scoringMode: 'standard', numAttempts: 3, heights: [] });
+  const [trialFilters, setTrialFilters]         = useState({ ageGroup: 'All', className: '', house: 'All', gender: 'All', customActivityName: '', unit: 'seconds', scoringMode: 'standard', numAttempts: 3, heights: [], eventActivityId: null });
+  const [trialEventActivities, setTrialEventActivities] = useState([]);
   const [newHeightInput, setNewHeightInput]     = useState('');
   const [trialHistory, setTrialHistory]         = useState([]);
   const [isLoading, setIsLoading]               = useState(false);
@@ -3410,7 +3460,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     try {
       const [{ data: results }, { data: sessions }] = await Promise.all([
         supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId),
-        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete').eq('trial_id', selectedTrialId),
+        supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete, event_activity_id').eq('trial_id', selectedTrialId),
       ]);
       const sessionMap = {};
       (sessions || []).forEach(s => {
@@ -3420,6 +3470,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
           numAttempts: s.num_attempts || 3,
           heights: s.heights_json || [],
           isComplete: s.is_complete || false,
+          eventActivityId: s.event_activity_id || null,
         };
       });
       const actMap = {};
@@ -3438,6 +3489,13 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   useEffect(() => {
     if (mode === 'trials' && selectedTrialId) fetchHistory();
   }, [selectedTrialId, mode, fetchHistory]);
+
+  // Load event activities for the trial event-link picker
+  useEffect(() => {
+    if (mode !== 'trials' || !selectedEventId) return;
+    supabase.from('event_activities').select('id, name, age_group, gender, unit, scoring_mode, num_attempts, heights_json').eq('event_id', selectedEventId).order('name')
+      .then(({ data }) => setTrialEventActivities(data || []));
+  }, [mode, selectedEventId]);
 
   const handleStartTrial = () => {
     if (!trialFilters.customActivityName) { showToast('Please provide an activity name (e.g., 100m Sprint).', 'error'); return; }
@@ -3458,12 +3516,13 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
           scoringMode: item.savedFilters.scoringMode || 'standard',
           numAttempts: item.savedFilters.numAttempts || 3,
           heights: item.savedFilters.heights || [],
+          eventActivityId: item.savedFilters.eventActivityId || null,
         }
       : {
           ageGroup: trialFilters.ageGroup, gender: trialFilters.gender,
           house: trialFilters.house, className: trialFilters.className,
           scoringMode: trialFilters.scoringMode, numAttempts: trialFilters.numAttempts,
-          heights: trialFilters.heights,
+          heights: trialFilters.heights, eventActivityId: trialFilters.eventActivityId,
         };
     const filters = { ...restoredFilters, customActivityName: item.name, unit: item.unit };
     const t = allTrials.find(t => t.id === selectedTrialId);
@@ -3641,38 +3700,74 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
             </Card>
           ) : (
             <>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <label className="font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap text-sm">Session:</label>
-                <div className="relative flex-1 max-w-sm">
+                <div className="relative flex-1 min-w-[180px] max-w-sm">
                   <select value={selectedTrialId} onChange={(e) => setSelectedTrialId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white font-medium shadow-sm appearance-none pr-8 text-sm">
                     {allTrials.map(t => <option key={t.id} value={t.id}>{t.name} ({t.trial_date})</option>)}
                   </select>
                   <ChevronDown className="absolute right-2 top-2.5 text-slate-500 pointer-events-none" size={16}/>
                 </div>
+                {allEvents.length > 0 && (
+                  <>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap text-sm">Event:</label>
+                    <div className="relative flex-1 min-w-[180px] max-w-sm">
+                      <select value={selectedEventId} onChange={(e) => { setSelectedEventId(e.target.value); setTrialFilters(f => ({ ...f, eventActivityId: null, customActivityName: '' })); }}
+                        className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white font-medium shadow-sm appearance-none pr-8 text-sm">
+                        {allEvents.map(ev => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+                      </select>
+                      <ChevronDown className="absolute right-2 top-2.5 text-slate-500 pointer-events-none" size={16}/>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Start a new activity */}
               <Card>
                 <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2"><Plus size={16} className="text-purple-500"/> New Entry Session</h3>
 
-                {/* Row 1: Activity name + measurement */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Activity Name <span className="text-red-400">*</span></label>
+                {/* Row 1: Link to event activity (or free-form fallback) */}
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Link to Event Activity <span className="text-red-400">*</span></label>
+                  {trialEventActivities.length > 0 ? (
+                    <div className="relative">
+                      <select
+                        value={trialFilters.eventActivityId || ''}
+                        onChange={(e) => {
+                          const ea = trialEventActivities.find(a => a.id === e.target.value);
+                          if (ea) {
+                            setTrialFilters(f => ({
+                              ...f,
+                              eventActivityId: ea.id,
+                              customActivityName: ea.name,
+                              ageGroup: ea.age_group || f.ageGroup,
+                              gender: ea.gender || f.gender,
+                              unit: ea.unit || f.unit,
+                              scoringMode: ea.scoring_mode || f.scoringMode,
+                              numAttempts: ea.num_attempts || f.numAttempts,
+                              heights: ea.heights_json || f.heights,
+                            }));
+                          } else {
+                            setTrialFilters(f => ({ ...f, eventActivityId: null, customActivityName: '' }));
+                          }
+                        }}
+                        className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm appearance-none pr-8">
+                        <option value="">— Select event activity —</option>
+                        {trialEventActivities.map(ea => (
+                          <option key={ea.id} value={ea.id}>{ea.name} — {ea.age_group} {ea.gender}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-2 top-3 text-slate-500 pointer-events-none" size={16}/>
+                    </div>
+                  ) : (
                     <input type="text" placeholder="e.g. 100m Sprint, High Jump, Discus…"
                       value={trialFilters.customActivityName} onChange={(e) => setTrialFilters({...trialFilters, customActivityName: e.target.value})}
                       className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none focus:ring-2 focus:ring-purple-400 bg-white dark:bg-slate-700 dark:text-white text-sm"/>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Measurement</label>
-                    <select value={trialFilters.unit} onChange={(e) => setTrialFilters({...trialFilters, unit: e.target.value})}
-                      className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
-                      <option value="seconds">Time (s)</option>
-                      <option value="meters">Distance (m)</option>
-                      <option value="cm">Height (cm)</option>
-                    </select>
-                  </div>
+                  )}
+                  {trialFilters.eventActivityId && (
+                    <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 font-medium">✓ Linked — results will be matched to the {trialFilters.customActivityName} event activity</p>
+                  )}
                 </div>
 
                 {/* Row 1b: Scoring mode */}
@@ -4307,8 +4402,9 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
           filters_json:  { ageGroup: activity.filters.ageGroup, gender: activity.filters.gender, house: activity.filters.house, className: activity.filters.className },
           scoring_mode:  tScoringMode,
           num_attempts:  activity.filters.numAttempts || 3,
-          heights_json:  activity.filters.heights || null,
-          updated_at:    new Date().toISOString(),
+          heights_json:       activity.filters.heights || null,
+          event_activity_id:  activity.filters.eventActivityId || null,
+          updated_at:         new Date().toISOString(),
         }, { onConflict: 'trial_id, activity_name' });
         // Clear localStorage backup — data is now safely in DB
         try { if (trialBackupKey) localStorage.removeItem(trialBackupKey); } catch (e) {}
