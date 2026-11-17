@@ -3669,7 +3669,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     if (!selectedTrialId) return;
     try {
       const [{ data: results }, { data: sessions }] = await Promise.all([
-        supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId),
+        supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId).limit(100000),
         supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete, event_activity_id').eq('trial_id', selectedTrialId),
       ]);
       const sessionMap = {};
