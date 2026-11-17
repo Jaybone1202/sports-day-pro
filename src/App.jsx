@@ -3668,8 +3668,8 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const fetchHistory = useCallback(async () => {
     if (!selectedTrialId) return;
     try {
-      const [{ data: results }, { data: sessions }] = await Promise.all([
-        supabase.from('trial_results').select('activity_name, unit, student_id').eq('trial_id', selectedTrialId).limit(100000),
+      const [{ data: counts }, { data: sessions }] = await Promise.all([
+        supabase.rpc('get_trial_activity_counts', { p_trial_id: selectedTrialId }),
         supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete, event_activity_id').eq('trial_id', selectedTrialId),
       ]);
       const sessionMap = {};
@@ -3683,15 +3683,12 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
           eventActivityId: s.event_activity_id || null,
         };
       });
-      const actMap = {};
-      (results || []).forEach(tr => {
-        if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, students: new Set() };
-        actMap[tr.activity_name].students.add(tr.student_id);
-      });
-      setTrialHistory(Object.entries(actMap).map(([name, { unit, students }]) => ({
-        name, unit, count: students.size,
-        savedFilters: sessionMap[name] || null,
-        isComplete: sessionMap[name]?.isComplete || false,
+      setTrialHistory((counts || []).map(({ activity_name, unit, student_count }) => ({
+        name: activity_name,
+        unit,
+        count: Number(student_count),
+        savedFilters: sessionMap[activity_name] || null,
+        isComplete: sessionMap[activity_name]?.isComplete || false,
       })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
     } catch (e) { console.error('History fetch error', e); }
   }, [selectedTrialId]);
