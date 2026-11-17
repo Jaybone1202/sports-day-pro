@@ -3685,11 +3685,11 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       });
       const actMap = {};
       (results || []).forEach(tr => {
-        if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, count: 0 };
-        actMap[tr.activity_name].count++;
+        if (!actMap[tr.activity_name]) actMap[tr.activity_name] = { unit: tr.unit, students: new Set() };
+        actMap[tr.activity_name].students.add(tr.student_id);
       });
-      setTrialHistory(Object.entries(actMap).map(([name, { unit, count }]) => ({
-        name, unit, count,
+      setTrialHistory(Object.entries(actMap).map(([name, { unit, students }]) => ({
+        name, unit, count: students.size,
         savedFilters: sessionMap[name] || null,
         isComplete: sessionMap[name]?.isComplete || false,
       })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })));
