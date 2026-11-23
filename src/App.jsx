@@ -3596,6 +3596,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const [editingHistory, setEditingHistory]     = useState(null);
   const [resultCounts, setResultCounts]         = useState({});
   const [linkingItem, setLinkingItem]           = useState(null); // history item currently being linked
+  const [houseRankings, setHouseRankings]       = useState({ isOpen: false, item: null, data: null, loading: false });
 
   useEffect(() => {
     const fetchContexts = async () => {
@@ -3668,7 +3669,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const fetchHistory = useCallback(async () => {
     if (!selectedTrialId) return;
     try {
-      const [{ data: counts }, { data: sessions }] = await Promise.all([
+      const [{ data: counts, error: rpcErr }, { data: sessions }] = await Promise.all([
         supabase.rpc('get_trial_activity_counts', { p_trial_id: selectedTrialId }),
         supabase.from('trial_activity_sessions').select('activity_name, unit, filters_json, scoring_mode, num_attempts, heights_json, is_complete, event_activity_id').eq('trial_id', selectedTrialId),
       ]);
@@ -3683,6 +3684,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
           eventActivityId: s.event_activity_id || null,
         };
       });
+      if (rpcErr) console.error('get_trial_activity_counts error:', rpcErr);
       setTrialHistory((counts || []).map(({ activity_name, unit, student_count }) => ({
         name: activity_name,
         unit,
@@ -3782,6 +3784,42 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
     } catch (e) { showToast('Failed to save link', 'error'); }
   };
 
+  const fetchHouseRankings = async (item) => {
+    setHouseRankings({ isOpen: true, item, data: null, loading: true });
+    try {
+      const [{ data: results }, { data: studentRows }] = await Promise.all([
+        supabase.from('trial_results').select('student_id, result_value, unit').eq('trial_id', selectedTrialId).eq('activity_name', item.name),
+        supabase.from('students').select('id, first_name, last_name, house').eq('school_id', user.school_id),
+      ]);
+      const studentMap = {};
+      (studentRows || []).forEach(s => { studentMap[s.id] = s; });
+      const lowerIsBetter = item.unit === 'seconds' || item.unit === 'minutes';
+      // best result per student
+      const bestMap = {};
+      (results || []).forEach(r => {
+        const val = parseFloat(r.result_value);
+        if (isNaN(val)) return;
+        if (bestMap[r.student_id] === undefined) { bestMap[r.student_id] = val; }
+        else { bestMap[r.student_id] = lowerIsBetter ? Math.min(bestMap[r.student_id], val) : Math.max(bestMap[r.student_id], val); }
+      });
+      // group by house
+      const houseMap = {};
+      Object.entries(bestMap).forEach(([sid, val]) => {
+        const s = studentMap[sid];
+        if (!s || !s.house) return;
+        if (!houseMap[s.house]) houseMap[s.house] = [];
+        houseMap[s.house].push({ student: s, val });
+      });
+      // sort each house
+      Object.keys(houseMap).forEach(h => {
+        houseMap[h].sort((a, b) => lowerIsBetter ? a.val - b.val : b.val - a.val);
+      });
+      setHouseRankings({ isOpen: true, item, data: houseMap, loading: false });
+    } catch (e) {
+      setHouseRankings(prev => ({ ...prev, loading: false, data: {} }));
+    }
+  };
+
   const confirmDeleteHistory = async () => {
     const item = modalConfig.payload;
     setModalConfig({ isOpen: false, type: null, payload: null });
@@ -3811,6 +3849,63 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   return (
     <div className="space-y-6">
       <ConfirmModal isOpen={modalConfig.isOpen && modalConfig.type === 'delete-history'} title="Delete Trial Data" message={`Permanently delete all data recorded for "${modalConfig.payload?.name}" in this session?`} onConfirm={confirmDeleteHistory} onCancel={() => setModalConfig({ isOpen: false, type: null, payload: null })}/>
+
+      {houseRankings.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}} onClick={() => setHouseRankings(r => ({...r, isOpen: false}))}>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <Trophy size={18} className="text-amber-500"/>
+                <h2 className="font-bold text-slate-900 dark:text-white">{houseRankings.item?.name} — House Rankings</h2>
+              </div>
+              <button onClick={() => setHouseRankings(r => ({...r, isOpen: false}))} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><X size={16}/></button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-6">
+              {houseRankings.loading ? (
+                <div className="text-center py-10 text-slate-400">Loading rankings…</div>
+              ) : !houseRankings.data || Object.keys(houseRankings.data).length === 0 ? (
+                <div className="text-center py-10 text-slate-400">No results recorded yet.</div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Object.keys(houseRankings.data).sort().map(house => {
+                    const athletes = houseRankings.data[house];
+                    const lowerIsBetter = houseRankings.item?.unit === 'seconds' || houseRankings.item?.unit === 'minutes';
+                    return (
+                      <div key={house} className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                        <div className="px-4 py-2.5 font-bold text-sm text-white" style={{background: houseColors?.[house] || '#64748b'}}>
+                          {house}
+                        </div>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {athletes.slice(0, 8).map((a, i) => (
+                              <tr key={a.student.id} className={i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-700/50'}>
+                                <td className="px-3 py-2 w-8">
+                                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-amber-700 text-white' : i < 6 ? 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
+                                    {i + 1}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 font-medium text-slate-800 dark:text-white">{a.student.first_name} {a.student.last_name}</td>
+                                <td className="px-3 py-2 text-right font-mono font-semibold text-slate-700 dark:text-slate-200">{a.val}{houseRankings.item?.unit || ''}</td>
+                                {i === 5 && athletes.length > 6 && (
+                                  <td/>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-400 text-center">
+              {houseRankings.item?.unit === 'seconds' || houseRankings.item?.unit === 'minutes' ? 'Ranked fastest → slowest' : 'Ranked furthest/highest → shortest'}
+              {' · Top 6 per house highlighted in blue = championship race qualifiers'}
+            </div>
+          </div>
+        </div>
+      )}
       <header className="mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Hello, {user.first_name}</h1>
         <p className="text-slate-500 dark:text-slate-400">Select an activity below to start entering results.</p>
@@ -4026,8 +4121,18 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                   )}
                 </div>
 
-                {/* Row 1b: Scoring mode */}
+                {/* Row 1b: Unit + Scoring mode */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Unit of Measurement</label>
+                    <select value={trialFilters.unit} onChange={(e) => setTrialFilters({...trialFilters, unit: e.target.value})}
+                      className="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl outline-none bg-white dark:bg-slate-700 dark:text-white text-sm">
+                      <option value="seconds">Time — seconds (sprints)</option>
+                      <option value="minutes">Time — minutes (middle distance)</option>
+                      <option value="m">Distance/Height — m (jumps, throws)</option>
+                      <option value="cm">Distance/Height — cm</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Scoring Mode</label>
                     <select value={trialFilters.scoringMode} onChange={(e) => setTrialFilters({...trialFilters, scoringMode: e.target.value, numAttempts: 3, heights: []})}
@@ -4177,6 +4282,11 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                               </div>
                             ) : (
                               <div className="flex gap-1 items-center shrink-0">
+                                <button onClick={e => { e.stopPropagation(); fetchHouseRankings(item); }}
+                                  className="p-1.5 rounded transition-colors text-amber-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30"
+                                  title="House Rankings">
+                                  <Trophy size={14}/>
+                                </button>
                                 <button onClick={e => { e.stopPropagation(); toggleHistoryComplete(item); }}
                                   className={`p-1.5 rounded transition-colors ${item.isComplete ? 'text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40' : 'text-slate-300 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/30'}`}
                                   title={item.isComplete ? 'Mark incomplete' : 'Mark complete'}>
