@@ -3597,6 +3597,7 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
   const [resultCounts, setResultCounts]         = useState({});
   const [linkingItem, setLinkingItem]           = useState(null); // history item currently being linked
   const [houseRankings, setHouseRankings]       = useState({ isOpen: false, item: null, data: null, loading: false });
+  const [editingUnit, setEditingUnit]           = useState(null); // activity_name being unit-edited
 
   useEffect(() => {
     const fetchContexts = async () => {
@@ -3844,6 +3845,18 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
       setEditingHistory(null);
       fetchHistory();
     } catch (e) { showToast('Failed to update trial name', 'error'); }
+  };
+
+  const saveHistoryUnit = async (item, newUnit) => {
+    setEditingUnit(null);
+    try {
+      await Promise.all([
+        supabase.from('trial_activity_sessions').update({ unit: newUnit }).eq('trial_id', selectedTrialId).eq('activity_name', item.name),
+        supabase.from('trial_results').update({ unit: newUnit }).eq('trial_id', selectedTrialId).eq('activity_name', item.name),
+      ]);
+      setTrialHistory(prev => prev.map(h => h.name === item.name ? { ...h, unit: newUnit } : h));
+      showToast('Unit updated.');
+    } catch (e) { showToast('Failed to update unit', 'error'); }
   };
 
   return (
@@ -4242,7 +4255,23 @@ const StaffDashboardMenu = ({ user, showToast, houseColors, schoolRecords, onSel
                               <div className="min-w-0">
                                 <p className={`font-semibold text-sm truncate ${item.isComplete ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-800 dark:text-white group-hover:text-purple-700'}`}>{item.name}</p>
                                 <p className="text-xs text-slate-400 flex items-center gap-1.5 flex-wrap">
-                                  {item.unit} · <span className={`font-semibold ${item.isComplete ? 'text-emerald-500' : 'text-purple-500'}`}>{item.count} student{item.count !== 1 ? 's' : ''}</span>
+                                  {editingUnit === item.name ? (
+                                    <select autoFocus value={item.unit}
+                                      onChange={e => saveHistoryUnit(item, e.target.value)}
+                                      onBlur={() => setEditingUnit(null)}
+                                      onClick={e => e.stopPropagation()}
+                                      className="text-xs px-1.5 py-0.5 border border-purple-300 rounded bg-white dark:bg-slate-700 dark:text-white outline-none">
+                                      <option value="seconds">seconds</option>
+                                      <option value="minutes">minutes</option>
+                                      <option value="m">m</option>
+                                      <option value="cm">cm</option>
+                                    </select>
+                                  ) : (
+                                    <button onClick={e => { e.stopPropagation(); e.preventDefault(); setEditingUnit(item.name); }}
+                                      className="underline decoration-dotted hover:text-purple-500 cursor-pointer"
+                                      title="Click to change unit">{item.unit}</button>
+                                  )}
+                                  · <span className={`font-semibold ${item.isComplete ? 'text-emerald-500' : 'text-purple-500'}`}>{item.count} student{item.count !== 1 ? 's' : ''}</span>
                                   {item.savedFilters?.eventActivityId
                                     ? <span className="text-emerald-500 font-medium">· ✓ linked</span>
                                     : <span className="text-amber-500 font-medium">· unlinked</span>
