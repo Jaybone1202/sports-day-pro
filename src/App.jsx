@@ -3319,7 +3319,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               });
             });
             // Build class sections
-            const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].sort();
+            // Grade 3 classes (e.g. "3.1") don't compete, so they're left off the class lists
+            const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].filter(c => !/^3\b/.test(c)).sort();
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
               // All events matching any student's age group in this class (gender handled per-student in cell lookup)
