@@ -3162,21 +3162,15 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
       ? false
       : selectedEa.higher_is_better !== false;
     return (results || [])
-      // FK match first; fall back to name + age_group + gender matching for unlinked sessions
-      .filter(r => r.event_activity_id
-        ? r.event_activity_id === selectedEa.id
-        : r.activity_name === selectedEa.name
-      )
-      .map(r => ({ ...r, student: studentMap[r.student_id] }))
+      // Match by FK OR by name+age_group+gender — both paths handle the case where
+      // a trial session was linked to only one gender's EA but recorded both genders
       .filter(r => {
-        if (!r.student) return false;
-        // For FK-linked results the session was explicitly tied — still verify demographics as a safeguard
-        // For name-matched results we must check age_group + gender
-        if (!r.event_activity_id) {
-          if (r.student.age_group !== selectedEa.age_group || r.student.gender !== selectedEa.gender) return false;
-        }
-        return true;
+        if (r.event_activity_id === selectedEa.id) return true;
+        const s = studentMap[r.student_id];
+        return r.activity_name === selectedEa.name && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
       })
+      .map(r => ({ ...r, student: studentMap[r.student_id] }))
+      .filter(r => r.student)
       // De-duplicate: keep best score per student
       .reduce((acc, r) => {
         const existing = acc.find(x => x.student_id === r.student_id);
@@ -3240,7 +3234,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 ? false
                 : ea.higher_is_better !== false;
               const ranked = (results || [])
-                .filter(r => r.event_activity_id ? r.event_activity_id === ea.id : (r.activity_name === ea.name && studentMap[r.student_id]?.age_group === ea.age_group && studentMap[r.student_id]?.gender === ea.gender))
+                .filter(r => { const s = studentMap[r.student_id]; return r.event_activity_id === ea.id || (r.activity_name === ea.name && s?.age_group === ea.age_group && s?.gender === ea.gender); })
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
                 .filter(r => r.student)
                 .reduce((acc, r) => {
@@ -3273,8 +3267,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].sort();
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
-              // Find events where at least one class student appears
-              const relevantEas = (eventActivities||[]).filter(ea => eaAthletes[ea.id]?.some(r => r.student?.class === cls || (!r.student?.class && cls === 'No Class')));
+              // All events matching any student's age group/gender in this class
+              const classAgGender = new Set(classStudents.map(s => `${s.age_group}|${s.gender}`));
+              const relevantEas = (eventActivities||[]).filter(ea => classAgGender.has(`${ea.age_group}|${ea.gender}`));
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
@@ -3285,7 +3280,18 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               const abbrevAg = ag => ag ? ag.replace(/under\s*/i, 'U').replace(/\s*(boys|girls|male|female)/i, '') : '';
               const headers = eaGroupNames.map(name => `<th class="grp-col" style="max-width:72px;word-break:break-word">${escHtml(name)}</th>`).join('');
               const groupedRows = classStudents.map(student => {
-                const inAny = eaGroupNames.some(name => eaByName[name]?.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === student.id)));
+                // Show student if: they have a heat in a sprint, OR they're selected/reserve in any field/middle event
+                const inAny = eaGroupNames.some(name => {
+                  const easForName = eaByName[name] || [];
+                  return easForName.some(ea => {
+                    const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
+                    if (!entry) return false;
+                    const isTrk = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
+                    if (isTrk) return entry.heat != null; // everyone with a heat
+                    const isRes = ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
+                    return entry.selected || isRes;
+                  });
+                });
                 if (!inAny) return '';
                 const eventCells = eaGroupNames.map(name => {
                   const easForName = eaByName[name] || [];
@@ -3303,10 +3309,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   if (isReserve) {
                     return `<td class="tick reserve"><div>RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
+                  if (!entry.selected) return `<td class="tick na">—</td>`;
                   const rank = eaAthletes[ea.id].indexOf(entry) + 1;
-                  return entry.selected
-                    ? `<td class="tick done"><div>#${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`
-                    : `<td class="tick miss"><div>${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
+                  return `<td class="tick done"><div>#${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
