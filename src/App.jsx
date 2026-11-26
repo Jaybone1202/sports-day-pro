@@ -3197,7 +3197,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
 
   // Per-house selection: mark each athlete as selected if they're in the top N for their house
   const perHouseLimit = selectedEa?.participants_per_house || null;
-  const isTrackEa = selectedEa?.activity_type === 'track';
+  const isTrackEa = selectedEa?.activity_type === 'track' || (!selectedEa?.activity_type && selectedEa?.unit === 'seconds');
   const SPRINT_HEAT_GROUP = 3; // students per house per heat
   const rankedAthletesWithSelection = React.useMemo(() => {
     if (!isTrackEa && !perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null, heat: null }));
@@ -3253,7 +3253,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 .filter(r => parseFloat(r.result_value) > 0)
                 .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
               const limit = ea.participants_per_house || null;
-              const isTrack = ea.activity_type === 'track';
+              const isTrack = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
               const HEAT_GROUP = 3;
               const houseCounts = {};
               eaAthletes[ea.id] = ranked.map(r => {
@@ -3278,31 +3278,39 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
-              const rows = classStudents.map(student => {
-                const inAny = relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === student.id));
+              // Group EAs by event name — one column per event, age group shown in cell
+              const eaGroupNames = [...new Set(relevantEas.map(ea => ea.name))];
+              const eaByName = {};
+              relevantEas.forEach(ea => { if (!eaByName[ea.name]) eaByName[ea.name] = []; eaByName[ea.name].push(ea); });
+              const abbrevAg = ag => ag ? ag.replace(/under\s*/i, 'U').replace(/\s*(boys|girls|male|female)/i, '') : '';
+              const headers = eaGroupNames.map(name => `<th class="grp-col" style="max-width:72px;word-break:break-word">${escHtml(name)}</th>`).join('');
+              const groupedRows = classStudents.map(student => {
+                const inAny = eaGroupNames.some(name => eaByName[name]?.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === student.id)));
                 if (!inAny) return '';
-                const eventCells = relevantEas.map(ea => {
-                  const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
+                const eventCells = eaGroupNames.map(name => {
+                  const easForName = eaByName[name] || [];
+                  let entry = null, ea = null;
+                  for (const e of easForName) { const found = eaAthletes[e.id]?.find(r => r.student_id === student.id); if (found) { entry = found; ea = e; break; } }
                   if (!entry) return `<td class="tick na">—</td>`;
+                  const ag = abbrevAg(ea.age_group);
                   const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
-                  const isTrackEa = ea.activity_type === 'track';
+                  const isTrackEa = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
                   const isReserve = !isTrackEa && ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
                   if (isTrackEa && entry.heat) {
-                    const cls = entry.heat === 1 ? 'heat champ' : 'heat other';
-                    return `<td class="tick ${cls}"><div>H${entry.heat}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                    const cls2 = entry.heat === 1 ? 'heat champ' : 'heat other';
+                    return `<td class="tick ${cls2}"><div>H${entry.heat}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
                   if (isReserve) {
-                    return `<td class="tick reserve"><div>RES</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                    return `<td class="tick reserve"><div>RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
                   const rank = eaAthletes[ea.id].indexOf(entry) + 1;
                   return entry.selected
-                    ? `<td class="tick done"><div>#${rank}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`
-                    : `<td class="tick miss"><div>${rank}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
+                    ? `<td class="tick done"><div>#${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`
+                    : `<td class="tick miss"><div>${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
-              const headers = relevantEas.map(ea => `<th class="grp-col" style="max-width:72px;word-break:break-word">${escHtml(ea.name)}<br/><span style="font-weight:400;color:#94a3b8;font-size:8.5px">${escHtml(ea.age_group)} ${escHtml(ea.gender)}</span></th>`).join('');
-              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${relevantEas.length} event${relevantEas.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p class="legend">Green H1 / #N = selected (championship heat / field top) &nbsp;·&nbsp; Amber RES = reserve &nbsp;·&nbsp; Grey H2+ = other heat &nbsp;·&nbsp; Grey N = not selected &nbsp;·&nbsp; — = no result</p></div>`;
+              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${eaGroupNames.length} event${eaGroupNames.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${groupedRows}</tbody></table><p class="legend">Green H1 / #N = selected (championship heat / field top) &nbsp;·&nbsp; Amber RES = reserve &nbsp;·&nbsp; Grey H2+ = other heat &nbsp;·&nbsp; Grey N = not selected &nbsp;·&nbsp; — = no result</p></div>`;
             }).filter(Boolean).join('');
             const win = window.open('', '_blank', 'width=1000,height=700');
             if (!win) return;
