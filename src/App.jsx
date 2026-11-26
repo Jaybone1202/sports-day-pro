@@ -3159,7 +3159,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
 
   // Strip verbose activity name format "U10 100m - Boys" → "100m"
   // so results from trials without session mappings still match EAs by name
-  const stripActName = n => n ? n.replace(/^(u\d+|under\s*\d+)\s+/i, '').replace(/\s*-\s*(boys|girls|male|female)\s*$/i, '').trim().toLowerCase() : '';
+  const stripActName = n => n ? n.replace(/^(u\d+|under\s*\d+)\s+/i, '').replace(/^(boys|girls|male|female|open)\s+/i, '').replace(/\s*-\s*(boys|girls|male|female)\s*$/i, '').trim().toLowerCase() : '';
 
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
@@ -3303,25 +3303,6 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 return { ...r, selected: limit ? houseRank <= limit : true, houseRank: limit ? houseRank : null, heat: null };
               });
             });
-            // === IN-PRINT DIAGNOSTIC PAGE ===
-            const dbgLines = [];
-            const sprint100Eas = (eventActivities||[]).filter(ea => ea.name === '100m');
-            dbgLines.push(`<b>100m EAs (${sprint100Eas.length}):</b>`);
-            sprint100Eas.forEach(ea => {
-              const athletes = eaAthletes[ea.id] || [];
-              dbgLines.push(`&nbsp;&nbsp;id=${ea.id.slice(0,8)} age=${ea.age_group} gender=${ea.gender} actType=${ea.activity_type} unit=${ea.unit} hib=${ea.higher_is_better} pph=${ea.participants_per_house} → ${athletes.length} athletes in list`);
-            });
-            const cls41Students = (students||[]).filter(s => (s.class||'') === '4.1');
-            dbgLines.push(`<b>Class 4.1 students (${cls41Students.length}):</b>`);
-            cls41Students.forEach(s => {
-              const inSprint = sprint100Eas.map(ea => {
-                const found = (eaAthletes[ea.id]||[]).find(r => r.student_id === s.id);
-                return found ? `${ea.gender}→H${found.heat||'?'}(hr${found.houseRank})` : null;
-              }).filter(Boolean).join(', ');
-              dbgLines.push(`&nbsp;&nbsp;${s.last_name},${s.first_name} [${s.gender}/${s.house}] 100m: ${inSprint||'NOT FOUND'}`);
-            });
-            const dbgHtml = `<div style="font-family:monospace;font-size:10px;padding:16px;border:2px solid red;margin-bottom:20px;page-break-after:always"><b style="font-size:14px;color:red">DEBUG PAGE — delete before printing</b><br><br>${dbgLines.join('<br>')}</div>`;
-            // === END IN-PRINT DIAGNOSTIC PAGE ===
             // Build class sections
             const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].sort();
             const sections = allClasses.map((cls, ci) => {
@@ -3417,7 +3398,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 @page{margin:12mm 10mm}
               }
             `;
-            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Athletes by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Athletes List</div><div class="doc-sub">Sports Day — by Class</div></div><div class="doc-meta">Printed ${printDate}</div></div>${dbgHtml}${sections || '<p style="color:#94a3b8;padding:20px">No athlete data found.</p>'}</body></html>`);
+            win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Athletes by Class</title><style>${css}</style></head><body><div class="doc-header"><div><div class="doc-title">Athletes List</div><div class="doc-sub">Sports Day — by Class</div></div><div class="doc-meta">Printed ${printDate}</div></div>${sections || '<p style="color:#94a3b8;padding:20px">No athlete data found.</p>'}</body></html>`);
             win.document.close(); win.focus();
             win.onload = () => win.print();
           }} className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-semibold transition-colors">
