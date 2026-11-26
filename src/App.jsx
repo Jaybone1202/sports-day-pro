@@ -3331,8 +3331,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                     return `<td class="tick reserve"><div>RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
                   if (!entry.selected) return `<td class="tick na">—</td>`;
-                  const rank = eaAthletes[ea.id].indexOf(entry) + 1;
-                  return `<td class="tick done"><div>#${rank}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                  const isRelayCell = ea.activity_type === 'relay' || /relay/i.test(ea.name||'');
+                  const houseLabel = isRelayCell ? `${(entry.student?.house||'').toUpperCase()} #${entry.houseRank}` : `#${entry.houseRank}`;
+                  return `<td class="tick done"><div>${houseLabel}${ag&&!isRelayCell?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
@@ -3432,16 +3433,17 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
                     <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
-                    {(isTrackEa || perHouseLimit) && (
+                    {(isTrackEa || isRelayEa || perHouseLimit) && (
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded min-w-[36px] text-center ${
                         isTrackEa
                           ? r.heat === 1 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
                                          : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                          : isRelayEa ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
                           : isReserve ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
                           : r.selected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
                                        : 'bg-slate-100 text-slate-400 dark:bg-slate-700'
                       }`}>
-                        {isTrackEa ? `H${r.heat}` : isReserve ? 'RES' : r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
+                        {isTrackEa ? `H${r.heat}` : isRelayEa ? `${(r.student?.house||'').toUpperCase()} #${r.houseRank}` : isReserve ? 'RES' : r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
                       </span>
                     )}
                   </div>
