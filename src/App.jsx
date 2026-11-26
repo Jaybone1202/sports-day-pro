@@ -3122,7 +3122,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
           trialIds.length
-            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit, trial_id').in('trial_id', trialIds).limit(10000)
+            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit, trial_id').in('trial_id', trialIds).limit(100000)
             : Promise.resolve({ data: [] }),
           supabase.from('school_houses').select('*').eq('school_id', user.school_id),
           trialIds.length
