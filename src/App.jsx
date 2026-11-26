@@ -8,22 +8,24 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// PostgREST caps each response at 1000 rows regardless of .limit(), so page through
-const fetchAllTrialResults = async (trialIds, columns) => {
+// PostgREST caps each response at 1000 rows regardless of .limit(), so page through.
+// orderCols must form a unique key so pages neither overlap nor skip rows.
+const fetchAllRows = async (table, columns, orderCols, applyFilters = q => q) => {
   const PAGE = 1000;
   const all = [];
   for (let from = 0; ; from += PAGE) {
-    const { data, error } = await supabase.from('trial_results')
-      .select(columns)
-      .in('trial_id', trialIds)
-      .order('trial_id').order('student_id').order('activity_name')
-      .range(from, from + PAGE - 1);
+    let q = applyFilters(supabase.from(table).select(columns));
+    orderCols.forEach(c => { q = q.order(c); });
+    const { data, error } = await q.range(from, from + PAGE - 1);
     if (error) throw error;
     all.push(...(data || []));
     if (!data || data.length < PAGE) break;
   }
   return { data: all };
 };
+
+const fetchAllTrialResults = (trialIds, columns) =>
+  fetchAllRows('trial_results', columns, ['trial_id', 'student_id', 'activity_name'], q => q.in('trial_id', trialIds));
 
 import {
   Trophy,
@@ -2834,7 +2836,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
           eventIds.length
             ? supabase.from('event_activities').select('id, name, age_group, gender').in('event_id', eventIds)
             : Promise.resolve({ data: [] }),
-          supabase.from('students').select('id, first_name, last_name, class, age_group, gender').eq('school_id', user.school_id),
+          fetchAllRows('students', 'id, first_name, last_name, class, age_group, gender', ['id'], q => q.eq('school_id', user.school_id)),
           trialIds.length
             ? fetchAllTrialResults(trialIds, 'student_id, activity_name, trial_id')
             : Promise.resolve({ data: [] }),
@@ -3137,7 +3139,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
           eventIds.length
             ? supabase.from('event_activities').select('id, name, age_group, gender, participants_per_house, higher_is_better, unit, activity_type').in('event_id', eventIds).order('name')
             : Promise.resolve({ data: [] }),
-          supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
+          fetchAllRows('students', 'id, first_name, last_name, class, age_group, gender, house', ['id'], q => q.eq('school_id', user.school_id)),
           trialIds.length
             ? fetchAllTrialResults(trialIds, 'student_id, activity_name, result_value, unit, trial_id')
             : Promise.resolve({ data: [] }),
@@ -6873,14 +6875,14 @@ const SuperAdminPanel = ({ user, onBack }) => {
         { data: event_records },
         { data: historical_records },
       ] = await Promise.all([
-        supabase.from('students').select('*').eq('school_id', user.school_id),
-        supabase.from('events').select('*').eq('school_id', user.school_id),
-        supabase.from('event_activities').select('*'),
-        supabase.from('event_results').select('*'),
-        supabase.from('trial_results').select('*'),
-        supabase.from('school_houses').select('*').eq('school_id', user.school_id),
-        supabase.from('event_records').select('*').eq('school_id', user.school_id),
-        supabase.from('historical_records').select('*').eq('school_id', user.school_id),
+        fetchAllRows('students', '*', ['id'], q => q.eq('school_id', user.school_id)),
+        fetchAllRows('events', '*', ['id'], q => q.eq('school_id', user.school_id)),
+        fetchAllRows('event_activities', '*', ['id']),
+        fetchAllRows('event_results', '*', ['event_activity_id', 'student_id']),
+        fetchAllRows('trial_results', '*', ['trial_id', 'student_id', 'activity_name']),
+        fetchAllRows('school_houses', '*', ['house_name'], q => q.eq('school_id', user.school_id)),
+        fetchAllRows('event_records', '*', ['activity_name', 'age_group', 'gender'], q => q.eq('school_id', user.school_id)),
+        fetchAllRows('historical_records', '*', ['id'], q => q.eq('school_id', user.school_id)),
       ]);
       const backup = {
         exported_at: new Date().toISOString(),
