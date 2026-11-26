@@ -3155,23 +3155,32 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
     return m;
   }, [students]);
 
+  const isRelayEa = selectedEa?.activity_type === 'relay' || /relay/i.test(selectedEa?.name || '');
+
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
-    // Track and long_distance are always lower-is-better (fastest wins), regardless of DB flag
-    const higherIsBetter = (selectedEa.activity_type === 'track' || selectedEa.activity_type === 'long_distance')
-      ? false
+    // Relay: source from sprint results for same age_group/gender instead of own results
+    const isRelay = selectedEa.activity_type === 'relay' || /relay/i.test(selectedEa.name || '');
+    const higherIsBetter = isRelay ? false
+      : (selectedEa.activity_type === 'track' || selectedEa.activity_type === 'long_distance') ? false
       : selectedEa.higher_is_better !== false;
-    return (results || [])
-      // Match by FK OR by name+age_group+gender — both paths handle the case where
-      // a trial session was linked to only one gender's EA but recorded both genders
-      .filter(r => {
-        if (r.event_activity_id === selectedEa.id) return true;
-        const s = studentMap[r.student_id];
-        return r.activity_name === selectedEa.name && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
-      })
+    const resultPool = (results || []).filter(r => {
+      const s = studentMap[r.student_id];
+      if (isRelay) {
+        // Pull from any track event for same age_group/gender
+        if (!s || s.age_group !== selectedEa.age_group || s.gender !== selectedEa.gender) return false;
+        const srcEas = (eventActivities || []).filter(e =>
+          (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
+          e.age_group === selectedEa.age_group && e.gender === selectedEa.gender
+        );
+        return srcEas.some(te => r.event_activity_id === te.id || r.activity_name === te.name);
+      }
+      if (r.event_activity_id === selectedEa.id) return true;
+      return r.activity_name === selectedEa.name && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
+    });
+    return resultPool
       .map(r => ({ ...r, student: studentMap[r.student_id] }))
       .filter(r => r.student)
-      // De-duplicate: keep best score per student
       .reduce((acc, r) => {
         const existing = acc.find(x => x.student_id === r.student_id);
         if (!existing) { acc.push(r); return acc; }
@@ -3181,17 +3190,19 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         if (better) { acc[acc.indexOf(existing)] = r; }
         return acc;
       }, [])
-      // Hide students who scored 0 — they tried but recorded nothing valid
       .filter(r => parseFloat(r.result_value) > 0)
       .sort((a, b) => higherIsBetter
         ? (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0)
         : (parseFloat(a.result_value) || 0) - (parseFloat(b.result_value) || 0)
       );
-  }, [results, selectedEa, studentMap]);
+  }, [results, selectedEa, studentMap, eventActivities]);
 
   // Per-house selection: mark each athlete as selected if they're in the top N for their house
-  const perHouseLimit = selectedEa?.participants_per_house || null;
-  const isTrackEa = selectedEa?.activity_type === 'track' || (!selectedEa?.activity_type && selectedEa?.unit === 'seconds');
+  // Relay defaults to 4 per house if participants_per_house not set
+  const perHouseLimit = isRelayEa
+    ? (selectedEa?.participants_per_house || 4)
+    : (selectedEa?.participants_per_house || null);
+  const isTrackEa = !isRelayEa && (selectedEa?.activity_type === 'track' || (!selectedEa?.activity_type && selectedEa?.unit === 'seconds'));
   const SPRINT_HEAT_GROUP = 3; // students per house per heat
   const rankedAthletesWithSelection = React.useMemo(() => {
     if (!isTrackEa && !perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null, heat: null }));
@@ -3230,11 +3241,21 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
             const eaAthletes = {};
             (eventActivities || []).forEach(ea => {
-              const higherIsBetter = (ea.activity_type === 'track' || ea.activity_type === 'long_distance')
-                ? false
-                : ea.higher_is_better !== false;
+              const isRelay = ea.activity_type === 'relay' || /relay/i.test(ea.name || '');
+              const higherIsBetter = (isRelay || ea.activity_type === 'track' || ea.activity_type === 'long_distance') ? false : ea.higher_is_better !== false;
               const ranked = (results || [])
-                .filter(r => { const s = studentMap[r.student_id]; return r.event_activity_id === ea.id || (r.activity_name === ea.name && s?.age_group === ea.age_group && s?.gender === ea.gender); })
+                .filter(r => {
+                  const s = studentMap[r.student_id];
+                  if (isRelay) {
+                    if (!s || s.age_group !== ea.age_group || s.gender !== ea.gender) return false;
+                    const srcEas = (eventActivities||[]).filter(e =>
+                      (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
+                      e.age_group === ea.age_group && e.gender === ea.gender
+                    );
+                    return srcEas.some(te => r.event_activity_id === te.id || r.activity_name === te.name);
+                  }
+                  return r.event_activity_id === ea.id || (r.activity_name === ea.name && s?.age_group === ea.age_group && s?.gender === ea.gender);
+                })
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
                 .filter(r => r.student)
                 .reduce((acc, r) => {
@@ -3246,8 +3267,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 }, [])
                 .filter(r => parseFloat(r.result_value) > 0)
                 .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
-              const limit = ea.participants_per_house || null;
-              const isTrack = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
+              const limit = isRelay ? (ea.participants_per_house || 4) : (ea.participants_per_house || null);
+              const isTrack = !isRelay && (ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
               const HEAT_GROUP = 3;
               const houseCounts = {};
               eaAthletes[ea.id] = ranked.map(r => {
