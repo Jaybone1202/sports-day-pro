@@ -217,11 +217,10 @@ const calculateStandings = (results, activities, houseColors) => {
     if (!act) return;
     const actResults = resultsByActivity[actId];
 
-    if (act.activity_type === 'track') {
-      actResults.sort((a, b) => parseFloat(a.result_value) - parseFloat(b.result_value));
-    } else {
-      actResults.sort((a, b) => parseFloat(b.result_value) - parseFloat(a.result_value));
-    }
+    // Times (track, middle distance, relays) and placings rank lowest-first; distances highest-first
+    const lowerIsBetter = ['track', 'long_distance', 'relay', 'placing'].includes(act.activity_type) || act.higher_is_better === false;
+    const val = r => parseFloat(r.result_value);
+    actResults.sort((a, b) => lowerIsBetter ? val(a) - val(b) : val(b) - val(a));
 
     actResults.forEach((res, index) => {
       const studentData = (Array.isArray(res.students) ? res.students[0] : res.students) || {};
@@ -2529,8 +2528,8 @@ const LiveStandingsModule = ({ user, showToast }) => {
       try {
         const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender, unit, higher_is_better').eq('event_id', selectedEventId);
         if (!activities || activities.length === 0) { setStandings([]); setRecentResults([]); return; }
-        const { data: results } = await supabase.from('event_results').select('*, students(*)').in('event_activity_id', activities.map(a => a.id)).order('recorded_at', { ascending: false });
-        if (!results) { setStandings([]); setRecentResults([]); return; }
+        const { data: results } = await fetchAllRows('event_results', '*, students(*)', ['event_activity_id', 'student_id'], q => q.in('event_activity_id', activities.map(a => a.id)));
+        results.sort((a, b) => (b.recorded_at || '').localeCompare(a.recorded_at || ''));
 
         // FIX: Use shared calculateStandings — also mutates results with calculated_points
         const newStandings = calculateStandings(results, activities, houseColors);
@@ -6087,8 +6086,8 @@ const ParentPortal = ({ onNavigate }) => {
       await supabase.rpc('set_config', { setting: 'app.parent_access_code', value: activeEvent?.parent_access_code || '', is_local: true });
       const { data: activities } = await supabase.from('event_activities').select('id, name, activity_type, age_group, gender').eq('event_id', eventId);
       if (!activities || activities.length === 0) return;
-      const { data: results } = await supabase.from('event_results').select('*, students(first_name, last_name, house)').in('event_activity_id', activities.map(a => a.id)).order('recorded_at', { ascending: false });
-      if (!results) return;
+      const { data: results } = await fetchAllRows('event_results', '*, students(first_name, last_name, house)', ['event_activity_id', 'student_id'], q => q.in('event_activity_id', activities.map(a => a.id)));
+      results.sort((a, b) => (b.recorded_at || '').localeCompare(a.recorded_at || ''));
 
       // FIX: Use shared calculateStandings — also mutates results with calculated_points
       const newStandings = calculateStandings(results, activities, houseColors);
