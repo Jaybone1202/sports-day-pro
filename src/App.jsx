@@ -3324,8 +3324,10 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
               // All events matching any student's age group in this class (gender handled per-student in cell lookup)
+              // Also include any event a class student is ranked in — U13s compete in "U14 (Open)" with no U13 event of their own
               const classAgeGroups = new Set(classStudents.map(s => normAg(s.age_group)).filter(Boolean));
-              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(normAg(ea.age_group)));
+              const classIds = new Set(classStudents.map(s => s.id));
+              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(normAg(ea.age_group)) || eaAthletes[ea.id]?.some(r => classIds.has(r.student_id)));
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
