@@ -8,6 +8,23 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// PostgREST caps each response at 1000 rows regardless of .limit(), so page through
+const fetchAllTrialResults = async (trialIds, columns) => {
+  const PAGE = 1000;
+  const all = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from('trial_results')
+      .select(columns)
+      .in('trial_id', trialIds)
+      .order('trial_id').order('student_id').order('activity_name')
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    all.push(...(data || []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { data: all };
+};
+
 import {
   Trophy,
   Users,
@@ -2819,7 +2836,7 @@ const ChecklistModule = ({ user, showToast, onBack }) => {
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender').eq('school_id', user.school_id),
           trialIds.length
-            ? supabase.from('trial_results').select('student_id, activity_name, trial_id').in('trial_id', trialIds)
+            ? fetchAllTrialResults(trialIds, 'student_id, activity_name, trial_id')
             : Promise.resolve({ data: [] }),
           trialIds.length
             ? supabase.from('trial_activity_sessions').select('trial_id, activity_name, event_activity_id, filters_json').in('trial_id', trialIds).not('event_activity_id', 'is', null)
@@ -3122,7 +3139,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
           trialIds.length
-            ? supabase.from('trial_results').select('student_id, activity_name, result_value, unit, trial_id').in('trial_id', trialIds).limit(100000)
+            ? fetchAllTrialResults(trialIds, 'student_id, activity_name, result_value, unit, trial_id')
             : Promise.resolve({ data: [] }),
           supabase.from('school_houses').select('*').eq('school_id', user.school_id),
           trialIds.length
@@ -3244,16 +3261,6 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
           <button onClick={() => {
             // Compute ranked + selected athletes for every EA
             const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            // === DIAGNOSTIC ===
-            console.log('[Athletes] results count:', (results||[]).length, '| students count:', (students||[]).length, '| eventActivities count:', (eventActivities||[]).length);
-            const resWithEaId = (results||[]).filter(r => r.event_activity_id).length;
-            const resWithoutEaId = (results||[]).filter(r => !r.event_activity_id).length;
-            console.log('[Athletes] results WITH event_activity_id:', resWithEaId, '| WITHOUT:', resWithoutEaId);
-            const sprintEas = (eventActivities||[]).filter(ea => ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
-            console.log('[Athletes] sprint EAs:', sprintEas.map(e => `${e.name}/${e.age_group}/${e.gender} (id:${e.id.slice(0,8)})`));
-            const sprintResultsForBoys100 = (results||[]).filter(r => { const s = studentMap[r.student_id]; return s?.age_group === 'U10' && s?.gender === 'Boys' && (r.activity_name?.includes('100m') || r.event_activity_id === sprintEas.find(e => e.age_group==='U10'&&e.gender==='Boys'&&e.name==='100m')?.id); });
-            console.log('[Athletes] U10 Boys 100m result rows:', sprintResultsForBoys100.length, '| sample student_ids:', sprintResultsForBoys100.slice(0,3).map(r => r.student_id.slice(0,8)));
-            // === END DIAGNOSTIC ===
             // Normalize age_group for comparison — strips "(Open)" suffix so "U14 (Open)" matches students' "U14"
             const normAg = ag => (ag||'').replace(/\s*\([^)]*\)\s*$/g, '').trim().toLowerCase();
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
