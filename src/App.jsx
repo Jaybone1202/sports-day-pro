@@ -3180,6 +3180,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
   // so results from trials without session mappings still match EAs by name
   const stripActName = n => n ? n.replace(/^(u\d+|under\s*\d+)\s+/i, '').replace(/^(boys|girls|male|female|open)\s+/i, '').replace(/\s*-\s*(boys|girls|male|female)\s*$/i, '').trim().toLowerCase() : '';
 
+  // Tied results rank alphabetically by surname, then first name
+  const byName = (a, b) => (a?.last_name || '').localeCompare(b?.last_name || '') || (a?.first_name || '').localeCompare(b?.first_name || '');
+
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
     // Relay: source from sprint results for same age_group/gender instead of own results
@@ -3216,10 +3219,10 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         return acc;
       }, [])
       .filter(r => parseFloat(r.result_value) > 0)
-      .sort((a, b) => higherIsBetter
+      .sort((a, b) => (higherIsBetter
         ? (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0)
         : (parseFloat(a.result_value) || 0) - (parseFloat(b.result_value) || 0)
-      );
+      ) || byName(a.student, b.student));
   }, [results, selectedEa, studentMap, eventActivities]);
 
   // Per-house selection: mark each athlete as selected if they're in the top N for their house
@@ -3297,7 +3300,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   return acc;
                 }, [])
                 .filter(r => parseFloat(r.result_value) > 0)
-                .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
+                .sort((a,b) => (higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0)) || byName(a.student, b.student));
               const limit = isRelay ? (ea.participants_per_house || 4) : (ea.participants_per_house || null);
               const isTrack = !isRelay && (ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
               const HEAT_GROUP = 3;
