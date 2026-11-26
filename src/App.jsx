@@ -3239,7 +3239,6 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Athletes List</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Top athletes per event activity, ranked by trial result</p>
-          <p className="text-xs text-orange-500 font-mono">DBG: results={results.length} withEaId={(results||[]).filter(r=>r.event_activity_id).length} eas={eventActivities.length} students={students.length}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => {
@@ -3255,6 +3254,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const sprintResultsForBoys100 = (results||[]).filter(r => { const s = studentMap[r.student_id]; return s?.age_group === 'U10' && s?.gender === 'Boys' && (r.activity_name?.includes('100m') || r.event_activity_id === sprintEas.find(e => e.age_group==='U10'&&e.gender==='Boys'&&e.name==='100m')?.id); });
             console.log('[Athletes] U10 Boys 100m result rows:', sprintResultsForBoys100.length, '| sample student_ids:', sprintResultsForBoys100.slice(0,3).map(r => r.student_id.slice(0,8)));
             // === END DIAGNOSTIC ===
+            // Normalize age_group for comparison — strips "(Open)" suffix so "U14 (Open)" matches students' "U14"
+            const normAg = ag => (ag||'').replace(/\s*\([^)]*\)\s*$/g, '').trim().toLowerCase();
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
             const eaAthletes = {};
             (eventActivities || []).forEach(ea => {
@@ -3264,23 +3265,25 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 .filter(r => {
                   const s = studentMap[r.student_id];
                   if (isRelay) {
-                    if (!s || s.age_group?.toLowerCase() !== ea.age_group?.toLowerCase() || s.gender?.toLowerCase() !== ea.gender?.toLowerCase()) return false;
+                    if (!s || normAg(s.age_group) !== normAg(ea.age_group) || s.gender?.toLowerCase() !== ea.gender?.toLowerCase()) return false;
                     const srcEas = (eventActivities||[]).filter(e =>
                       (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
-                      e.age_group?.toLowerCase() === ea.age_group?.toLowerCase() && e.gender?.toLowerCase() === ea.gender?.toLowerCase()
+                      normAg(e.age_group) === normAg(ea.age_group) && e.gender?.toLowerCase() === ea.gender?.toLowerCase()
                     );
                     const strippedR = stripActName(r.activity_name);
                     return srcEas.some(te => r.event_activity_id === te.id || strippedR === te.name.toLowerCase());
                   }
                   const strippedR = stripActName(r.activity_name);
-                  return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && s?.age_group?.toLowerCase() === ea.age_group?.toLowerCase() && s?.gender?.toLowerCase() === ea.gender?.toLowerCase());
+                  return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && normAg(s?.age_group) === normAg(ea.age_group) && s?.gender?.toLowerCase() === ea.gender?.toLowerCase());
                 })
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
                 .filter(r => r.student)
                 .reduce((acc, r) => {
+                  const val = parseFloat(r.result_value) || 0;
+                  if (val <= 0) return acc; // skip zero/null results — a 0 must never displace a valid time
                   const ex = acc.find(x => x.student_id === r.student_id);
                   if (!ex) { acc.push(r); return acc; }
-                  const better = higherIsBetter ? (parseFloat(r.result_value)||0) > (parseFloat(ex.result_value)||0) : (parseFloat(r.result_value)||0) < (parseFloat(ex.result_value)||0);
+                  const better = higherIsBetter ? val > (parseFloat(ex.result_value)||0) : val < (parseFloat(ex.result_value)||0);
                   if (better) acc[acc.indexOf(ex)] = r;
                   return acc;
                 }, [])
@@ -3308,8 +3311,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
               // All events matching any student's age group in this class (gender handled per-student in cell lookup)
-              const classAgeGroups = new Set(classStudents.map(s => s.age_group?.toLowerCase()).filter(Boolean));
-              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(ea.age_group?.toLowerCase()));
+              const classAgeGroups = new Set(classStudents.map(s => normAg(s.age_group)).filter(Boolean));
+              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(normAg(ea.age_group)));
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
