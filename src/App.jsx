@@ -3328,12 +3328,13 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                     return `<td class="tick ${cls2}"><div>H${entry.heat}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
                   if (isReserve) {
-                    return `<td class="tick reserve"><div>RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                    const hRes = (entry.student?.house||'').toUpperCase();
+                    return `<td class="tick reserve"><div>${hRes} RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                   }
                   if (!entry.selected) return `<td class="tick na">—</td>`;
-                  const isRelayCell = ea.activity_type === 'relay' || /relay/i.test(ea.name||'');
-                  const houseLabel = isRelayCell ? `${(entry.student?.house||'').toUpperCase()} #${entry.houseRank}` : `#${entry.houseRank}`;
-                  return `<td class="tick done"><div>${houseLabel}${ag&&!isRelayCell?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                  const h2 = (entry.student?.house||'').toUpperCase();
+                  const houseLabel = `${h2} #${entry.houseRank}`;
+                  return `<td class="tick done"><div>${houseLabel}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
@@ -3443,7 +3444,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                           : r.selected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
                                        : 'bg-slate-100 text-slate-400 dark:bg-slate-700'
                       }`}>
-                        {isTrackEa ? `H${r.heat}` : isRelayEa ? `${(r.student?.house||'').toUpperCase()} #${r.houseRank}` : isReserve ? 'RES' : r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
+                        {(() => { const h = (r.student?.house||'').toUpperCase(); return isTrackEa ? `H${r.heat}` : isReserve ? `${h} RES` : (isRelayEa || r.selected) ? `${h} #${r.houseRank}` : `#${r.houseRank}`; })()}
                       </span>
                     )}
                   </div>
