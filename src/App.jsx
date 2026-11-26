@@ -116,7 +116,7 @@ export class ErrorBoundary extends React.Component {
 // ==========================================
 
 // FIX: Single source of truth for the points system
-const POINTS_MAP = [10, 8, 6, 4, 2, 1];
+const POINTS_MAP = [7, 5, 4, 3, 2, 1];
 const RECORD_BONUS_POINTS = 2;
 
 const TAILWIND_COLORS = [
