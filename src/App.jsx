@@ -3157,7 +3157,10 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
 
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
-    const higherIsBetter = selectedEa.higher_is_better !== false;
+    // Track and long_distance are always lower-is-better (fastest wins), regardless of DB flag
+    const higherIsBetter = (selectedEa.activity_type === 'track' || selectedEa.activity_type === 'long_distance')
+      ? false
+      : selectedEa.higher_is_better !== false;
     return (results || [])
       // FK match first; fall back to name + age_group + gender matching for unlinked sessions
       .filter(r => r.event_activity_id
@@ -3184,6 +3187,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         if (better) { acc[acc.indexOf(existing)] = r; }
         return acc;
       }, [])
+      // Hide students who scored 0 — they tried but recorded nothing valid
+      .filter(r => parseFloat(r.result_value) > 0)
       .sort((a, b) => higherIsBetter
         ? (parseFloat(b.result_value) || 0) - (parseFloat(a.result_value) || 0)
         : (parseFloat(a.result_value) || 0) - (parseFloat(b.result_value) || 0)
@@ -3225,7 +3230,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
             const eaAthletes = {};
             (eventActivities || []).forEach(ea => {
-              const higherIsBetter = ea.higher_is_better !== false;
+              const higherIsBetter = (ea.activity_type === 'track' || ea.activity_type === 'long_distance')
+                ? false
+                : ea.higher_is_better !== false;
               const ranked = (results || [])
                 .filter(r => r.event_activity_id ? r.event_activity_id === ea.id : (r.activity_name === ea.name && studentMap[r.student_id]?.age_group === ea.age_group && studentMap[r.student_id]?.gender === ea.gender))
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
@@ -3237,6 +3244,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   if (better) acc[acc.indexOf(ex)] = r;
                   return acc;
                 }, [])
+                .filter(r => parseFloat(r.result_value) > 0)
                 .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
               const limit = ea.participants_per_house || null;
               const houseCounts = {};
@@ -3380,7 +3388,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         </Card>
       )}
       <p className="text-xs text-slate-400 hide-on-print">
-        {rankedAthletes.length} athletes listed · sorted by {selectedEa?.higher_is_better !== false ? 'best (highest)' : 'best (lowest)'} result
+        {rankedAthletes.length} athletes listed · sorted by {(selectedEa?.activity_type === 'track' || selectedEa?.activity_type === 'long_distance') ? 'best (lowest)' : selectedEa?.higher_is_better !== false ? 'best (highest)' : 'best (lowest)'} result
         {perHouseLimit ? ` · top ${perHouseLimit} per house selected` : ''}
       </p>
     </div>
