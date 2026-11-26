@@ -3264,16 +3264,16 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 .filter(r => {
                   const s = studentMap[r.student_id];
                   if (isRelay) {
-                    if (!s || s.age_group !== ea.age_group || s.gender !== ea.gender) return false;
+                    if (!s || s.age_group?.toLowerCase() !== ea.age_group?.toLowerCase() || s.gender?.toLowerCase() !== ea.gender?.toLowerCase()) return false;
                     const srcEas = (eventActivities||[]).filter(e =>
                       (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
-                      e.age_group === ea.age_group && e.gender === ea.gender
+                      e.age_group?.toLowerCase() === ea.age_group?.toLowerCase() && e.gender?.toLowerCase() === ea.gender?.toLowerCase()
                     );
                     const strippedR = stripActName(r.activity_name);
                     return srcEas.some(te => r.event_activity_id === te.id || strippedR === te.name.toLowerCase());
                   }
                   const strippedR = stripActName(r.activity_name);
-                  return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && s?.age_group === ea.age_group && s?.gender === ea.gender);
+                  return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && s?.age_group?.toLowerCase() === ea.age_group?.toLowerCase() && s?.gender?.toLowerCase() === ea.gender?.toLowerCase());
                 })
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
                 .filter(r => r.student)
@@ -3308,8 +3308,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
               // All events matching any student's age group in this class (gender handled per-student in cell lookup)
-              const classAgeGroups = new Set(classStudents.map(s => s.age_group).filter(Boolean));
-              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(ea.age_group));
+              const classAgeGroups = new Set(classStudents.map(s => s.age_group?.toLowerCase()).filter(Boolean));
+              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(ea.age_group?.toLowerCase()));
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
