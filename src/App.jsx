@@ -3118,7 +3118,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         const trialIds = (trialData || []).map(t => t.id);
         const [{ data: eaData }, { data: stuData }, { data: resData }, { data: hcData }, { data: sesData }] = await Promise.all([
           eventIds.length
-            ? supabase.from('event_activities').select('id, name, age_group, gender, participants_per_house, higher_is_better, unit').in('event_id', eventIds).order('name')
+            ? supabase.from('event_activities').select('id, name, age_group, gender, participants_per_house, higher_is_better, unit, activity_type').in('event_id', eventIds).order('name')
             : Promise.resolve({ data: [] }),
           supabase.from('students').select('id, first_name, last_name, class, age_group, gender, house').eq('school_id', user.school_id),
           trialIds.length
