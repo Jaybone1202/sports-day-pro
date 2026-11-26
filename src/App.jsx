@@ -3197,18 +3197,24 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
 
   // Per-house selection: mark each athlete as selected if they're in the top N for their house
   const perHouseLimit = selectedEa?.participants_per_house || null;
+  const isTrackEa = selectedEa?.activity_type === 'track';
+  const SPRINT_HEAT_GROUP = 3; // students per house per heat
   const rankedAthletesWithSelection = React.useMemo(() => {
-    if (!perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null }));
+    if (!isTrackEa && !perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null, heat: null }));
     const houseCounts = {};
     return rankedAthletes.map(r => {
       const hasValidResult = parseFloat(r.result_value) > 0;
-      if (!hasValidResult) return { ...r, selected: false, houseRank: null };
+      if (!hasValidResult) return { ...r, selected: false, houseRank: null, heat: null };
       const house = r.student?.house || 'Unknown';
       houseCounts[house] = (houseCounts[house] || 0) + 1;
       const houseRank = houseCounts[house];
-      return { ...r, selected: houseRank <= perHouseLimit, houseRank };
+      if (isTrackEa) {
+        const heat = Math.ceil(houseRank / SPRINT_HEAT_GROUP);
+        return { ...r, selected: heat === 1, houseRank, heat };
+      }
+      return { ...r, selected: houseRank <= perHouseLimit, houseRank, heat: null };
     });
-  }, [rankedAthletes, perHouseLimit]);
+  }, [rankedAthletes, perHouseLimit, isTrackEa]);
 
   const selectClass = "px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-xl text-sm bg-white dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-sky-500";
 
@@ -3247,14 +3253,20 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 .filter(r => parseFloat(r.result_value) > 0)
                 .sort((a,b) => higherIsBetter ? (parseFloat(b.result_value)||0)-(parseFloat(a.result_value)||0) : (parseFloat(a.result_value)||0)-(parseFloat(b.result_value)||0));
               const limit = ea.participants_per_house || null;
+              const isTrack = ea.activity_type === 'track';
+              const HEAT_GROUP = 3;
               const houseCounts = {};
               eaAthletes[ea.id] = ranked.map(r => {
                 const hasValidResult = parseFloat(r.result_value) > 0;
-                if (limit && !hasValidResult) return { ...r, selected: false, houseRank: null };
+                if (!hasValidResult) return { ...r, selected: false, houseRank: null, heat: null };
                 const house = r.student?.house || 'Unknown';
                 houseCounts[house] = (houseCounts[house] || 0) + 1;
                 const houseRank = houseCounts[house];
-                return { ...r, selected: limit ? houseRank <= limit : true, houseRank: limit ? houseRank : null };
+                if (isTrack) {
+                  const heat = Math.ceil(houseRank / HEAT_GROUP);
+                  return { ...r, selected: heat === 1, houseRank, heat };
+                }
+                return { ...r, selected: limit ? houseRank <= limit : true, houseRank: limit ? houseRank : null, heat: null };
               });
             });
             // Build class sections
@@ -3272,17 +3284,25 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                 const eventCells = relevantEas.map(ea => {
                   const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
                   if (!entry) return `<td class="tick na">—</td>`;
-                  const sel = entry.selected;
                   const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
+                  const isTrackEa = ea.activity_type === 'track';
+                  const isReserve = !isTrackEa && ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
+                  if (isTrackEa && entry.heat) {
+                    const cls = entry.heat === 1 ? 'heat champ' : 'heat other';
+                    return `<td class="tick ${cls}"><div>H${entry.heat}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                  }
+                  if (isReserve) {
+                    return `<td class="tick reserve"><div>RES</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                  }
                   const rank = eaAthletes[ea.id].indexOf(entry) + 1;
-                  return sel
+                  return entry.selected
                     ? `<td class="tick done"><div>#${rank}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`
                     : `<td class="tick miss"><div>${rank}</div><div style="font-size:9px">${escHtml(val)}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
               const headers = relevantEas.map(ea => `<th class="grp-col" style="max-width:72px;word-break:break-word">${escHtml(ea.name)}<br/><span style="font-weight:400;color:#94a3b8;font-size:8.5px">${escHtml(ea.age_group)} ${escHtml(ea.gender)}</span></th>`).join('');
-              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${relevantEas.length} event${relevantEas.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p class="legend">Green #N = selected &nbsp;·&nbsp; grey N = ranked but not selected &nbsp;·&nbsp; — = no result for this event</p></div>`;
+              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${relevantEas.length} event${relevantEas.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${rows}</tbody></table><p class="legend">Green H1 / #N = selected (championship heat / field top) &nbsp;·&nbsp; Amber RES = reserve &nbsp;·&nbsp; Grey H2+ = other heat &nbsp;·&nbsp; Grey N = not selected &nbsp;·&nbsp; — = no result</p></div>`;
             }).filter(Boolean).join('');
             const win = window.open('', '_blank', 'width=1000,height=700');
             if (!win) return;
@@ -3311,6 +3331,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               td.tick.done{background:#dcfce7;color:#15803d;font-weight:700}
               td.tick.miss{background:#fff;color:#94a3b8}
               td.tick.na{background:#f8fafc;color:#cbd5e1}
+              td.tick.heat.champ{background:#dcfce7;color:#15803d;font-weight:700}
+              td.tick.heat.other{background:#f1f5f9;color:#64748b;font-weight:600}
+              td.tick.reserve{background:#fef3c7;color:#b45309;font-weight:700}
               .legend{font-size:9px;color:#94a3b8;margin:5px 0 0;padding:0 2px}
               @media print{
                 body{padding:10px}
@@ -3362,8 +3385,11 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             <div className="text-center py-10 text-slate-400 text-sm">No trial results found for this event activity.</div>
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
-              {rankedAthletesWithSelection.map((r, idx) => (
-                <div key={r.student_id} className={`flex items-center gap-3 px-5 py-3 ${r.selected === false ? 'opacity-40' : ''}`}>
+              {rankedAthletesWithSelection.map((r, idx) => {
+                const isReserve = !isTrackEa && perHouseLimit && r.houseRank === perHouseLimit + 1;
+                const isFaded = !isTrackEa && r.selected === false && !isReserve;
+                return (
+                <div key={r.student_id} className={`flex items-center gap-3 px-5 py-3 ${isFaded ? 'opacity-40' : ''}`}>
                   <span className="w-7 text-center font-bold text-slate-400 text-sm font-mono">{idx + 1}</span>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-slate-900 dark:text-white">{r.student.last_name}, {r.student.first_name}</p>
@@ -3372,9 +3398,16 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`inline-block w-2 h-2 rounded-full ${getHouseColor(r.student.house, houseColors)}`}/>
                     <span className="text-xs text-slate-500 dark:text-slate-400 w-20 truncate">{r.student.house || '—'}</span>
-                    {perHouseLimit && (
-                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${r.selected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-700'}`}>
-                        {r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
+                    {(isTrackEa || perHouseLimit) && (
+                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded min-w-[36px] text-center ${
+                        isTrackEa
+                          ? r.heat === 1 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                         : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                          : isReserve ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400'
+                          : r.selected ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400'
+                                       : 'bg-slate-100 text-slate-400 dark:bg-slate-700'
+                      }`}>
+                        {isTrackEa ? `H${r.heat}` : isReserve ? 'RES' : r.selected ? `✓ #${r.houseRank}` : `#${r.houseRank}`}
                       </span>
                     )}
                   </div>
@@ -3382,7 +3415,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                     {r.result_value !== null && r.result_value !== undefined ? r.result_value : '—'}{(r.unit || selectedEa.unit) ? ` ${r.unit || selectedEa.unit}` : ''}
                   </span>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
