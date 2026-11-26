@@ -3288,9 +3288,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
             const allClasses = [...new Set((students||[]).map(s => s.class||'No Class'))].sort();
             const sections = allClasses.map((cls, ci) => {
               const classStudents = (students||[]).filter(s => (s.class||'No Class') === cls);
-              // All events matching any student's age group/gender in this class
-              const classAgGender = new Set(classStudents.map(s => `${s.age_group}|${s.gender}`));
-              const relevantEas = (eventActivities||[]).filter(ea => classAgGender.has(`${ea.age_group}|${ea.gender}`));
+              // All events matching any student's age group in this class (gender handled per-student in cell lookup)
+              const classAgeGroups = new Set(classStudents.map(s => s.age_group).filter(Boolean));
+              const relevantEas = (eventActivities||[]).filter(ea => classAgeGroups.has(ea.age_group));
               if (relevantEas.length === 0) return '';
               const pb = ci < allClasses.length - 1 ? ' page-break' : '';
               const selectedCount = classStudents.filter(s => relevantEas.some(ea => eaAthletes[ea.id]?.find(r => r.student_id === s.id && r.selected))).length;
