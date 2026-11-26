@@ -3233,11 +3233,22 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-white">Athletes List</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">Top athletes per event activity, ranked by trial result</p>
+          <p className="text-xs text-orange-500 font-mono">DBG: results={results.length} withEaId={(results||[]).filter(r=>r.event_activity_id).length} eas={eventActivities.length} students={students.length}</p>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => {
             // Compute ranked + selected athletes for every EA
             const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            // === DIAGNOSTIC ===
+            console.log('[Athletes] results count:', (results||[]).length, '| students count:', (students||[]).length, '| eventActivities count:', (eventActivities||[]).length);
+            const resWithEaId = (results||[]).filter(r => r.event_activity_id).length;
+            const resWithoutEaId = (results||[]).filter(r => !r.event_activity_id).length;
+            console.log('[Athletes] results WITH event_activity_id:', resWithEaId, '| WITHOUT:', resWithoutEaId);
+            const sprintEas = (eventActivities||[]).filter(ea => ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
+            console.log('[Athletes] sprint EAs:', sprintEas.map(e => `${e.name}/${e.age_group}/${e.gender} (id:${e.id.slice(0,8)})`));
+            const sprintResultsForBoys100 = (results||[]).filter(r => { const s = studentMap[r.student_id]; return s?.age_group === 'U10' && s?.gender === 'Boys' && (r.activity_name?.includes('100m') || r.event_activity_id === sprintEas.find(e => e.age_group==='U10'&&e.gender==='Boys'&&e.name==='100m')?.id); });
+            console.log('[Athletes] U10 Boys 100m result rows:', sprintResultsForBoys100.length, '| sample student_ids:', sprintResultsForBoys100.slice(0,3).map(r => r.student_id.slice(0,8)));
+            // === END DIAGNOSTIC ===
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
             const eaAthletes = {};
             (eventActivities || []).forEach(ea => {
@@ -3307,7 +3318,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   return easForName.some(ea => {
                     const entry = eaAthletes[ea.id]?.find(r => r.student_id === student.id);
                     if (!entry) return false;
-                    const isTrk = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
+                    const isRelayEaInAny = /relay/i.test(ea.name || '');
+                    const isTrk = !isRelayEaInAny && (ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
                     if (isTrk) return entry.heat != null; // everyone with a heat
                     const isRes = ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
                     return entry.selected || isRes;
@@ -3321,8 +3333,9 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   if (!entry) return `<td class="tick na">—</td>`;
                   const ag = abbrevAg(ea.age_group);
                   const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
-                  const isTrackEa = ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds');
-                  const isReserve = !isTrackEa && ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
+                  const isRelayEaCell = /relay/i.test(ea.name || '');
+                  const isTrackEa = !isRelayEaCell && (ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
+                  const isReserve = !isTrackEa && !isRelayEaCell && ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
                   if (isTrackEa && entry.heat) {
                     const cls2 = entry.heat === 1 ? 'heat champ' : 'heat other';
                     return `<td class="tick ${cls2}"><div>H${entry.heat}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
