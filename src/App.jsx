@@ -3196,6 +3196,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
     if (!perHouseLimit) return rankedAthletes.map(r => ({ ...r, selected: null, houseRank: null }));
     const houseCounts = {};
     return rankedAthletes.map(r => {
+      const hasValidResult = parseFloat(r.result_value) > 0;
+      if (!hasValidResult) return { ...r, selected: false, houseRank: null };
       const house = r.student?.house || 'Unknown';
       houseCounts[house] = (houseCounts[house] || 0) + 1;
       const houseRank = houseCounts[house];
@@ -3239,6 +3241,8 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               const limit = ea.participants_per_house || null;
               const houseCounts = {};
               eaAthletes[ea.id] = ranked.map(r => {
+                const hasValidResult = parseFloat(r.result_value) > 0;
+                if (limit && !hasValidResult) return { ...r, selected: false, houseRank: null };
                 const house = r.student?.house || 'Unknown';
                 houseCounts[house] = (houseCounts[house] || 0) + 1;
                 const houseRank = houseCounts[house];
