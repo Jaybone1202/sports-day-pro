@@ -3157,6 +3157,10 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
 
   const isRelayEa = selectedEa?.activity_type === 'relay' || /relay/i.test(selectedEa?.name || '');
 
+  // Strip verbose activity name format "U10 100m - Boys" → "100m"
+  // so results from trials without session mappings still match EAs by name
+  const stripActName = n => n ? n.replace(/^(u\d+|under\s*\d+)\s+/i, '').replace(/\s*-\s*(boys|girls|male|female)\s*$/i, '').trim().toLowerCase() : '';
+
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
     // Relay: source from sprint results for same age_group/gender instead of own results
@@ -3173,10 +3177,12 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
           (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
           e.age_group === selectedEa.age_group && e.gender === selectedEa.gender
         );
-        return srcEas.some(te => r.event_activity_id === te.id || r.activity_name === te.name);
+        const stripped = stripActName(r.activity_name);
+        return srcEas.some(te => r.event_activity_id === te.id || stripped === te.name.toLowerCase());
       }
       if (r.event_activity_id === selectedEa.id) return true;
-      return r.activity_name === selectedEa.name && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
+      const stripped = stripActName(r.activity_name);
+      return stripped === selectedEa.name.toLowerCase() && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
     });
     return resultPool
       .map(r => ({ ...r, student: studentMap[r.student_id] }))
@@ -3263,9 +3269,11 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                       (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
                       e.age_group === ea.age_group && e.gender === ea.gender
                     );
-                    return srcEas.some(te => r.event_activity_id === te.id || r.activity_name === te.name);
+                    const strippedR = stripActName(r.activity_name);
+                    return srcEas.some(te => r.event_activity_id === te.id || strippedR === te.name.toLowerCase());
                   }
-                  return r.event_activity_id === ea.id || (r.activity_name === ea.name && s?.age_group === ea.age_group && s?.gender === ea.gender);
+                  const strippedR = stripActName(r.activity_name);
+                  return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && s?.age_group === ea.age_group && s?.gender === ea.gender);
                 })
                 .map(r => ({ ...r, student: studentMap[r.student_id] }))
                 .filter(r => r.student)
