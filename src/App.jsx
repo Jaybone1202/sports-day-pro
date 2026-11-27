@@ -3370,12 +3370,12 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   }
                   if (!entry.selected) return `<td class="tick na">—</td>`;
                   const h2 = (entry.student?.house||'').toUpperCase();
-                  const houseLabel = `${h2} #${entry.houseRank}`;
+                  const houseLabel = h2;
                   return `<td class="tick done"><div>${houseLabel}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
-              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${eaGroupNames.length} event${eaGroupNames.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${groupedRows}</tbody></table><p class="legend">Green H1 / #N = selected (championship heat / field top) &nbsp;·&nbsp; Amber RES = reserve &nbsp;·&nbsp; Grey H2+ = other heat &nbsp;·&nbsp; Grey N = not selected &nbsp;·&nbsp; — = no result</p></div>`;
+              return `<div class="class-block${pb}"><div class="class-header"><span class="class-name">${escHtml(cls)}</span><span class="class-count">${selectedCount} student${selectedCount!==1?'s':''} selected across ${eaGroupNames.length} event${eaGroupNames.length!==1?'s':''}</span></div><table><thead><tr><th class="name-col">Student</th><th class="grp-col">House</th>${headers}</tr></thead><tbody>${groupedRows}</tbody></table><p class="legend">Green H1 = championship heat &nbsp;·&nbsp; Grey H2+ = other heat &nbsp;·&nbsp; Green house name = selected &nbsp;·&nbsp; Amber RES = reserve &nbsp;·&nbsp; — = not in this event</p></div>`;
             }).filter(Boolean).join('');
             const win = window.open('', '_blank', 'width=1000,height=700');
             if (!win) return;
