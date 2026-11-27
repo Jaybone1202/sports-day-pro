@@ -3182,6 +3182,22 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
   // Tied results rank alphabetically by surname, then first name
   const byName = (a, b) => (a?.last_name || '').localeCompare(b?.last_name || '') || (a?.first_name || '').localeCompare(b?.first_name || '');
 
+  // Strips "(Open)" so "U14 (Open)" compares equal to a student's "U14"
+  const normAg = ag => (ag||'').replace(/\s*\([^)]*\)\s*$/g, '').trim().toLowerCase();
+
+  // Relay teams come from sprint times in the relay's own age/gender sprint event. A result linked to that
+  // event counts whatever the child's age group, so U13s who run in the U14 (Open) sprint feed its relay.
+  const isRelaySource = (r, s, relayEa) => {
+    if (!s || s.gender?.toLowerCase() !== relayEa.gender?.toLowerCase()) return false;
+    const srcEas = (eventActivities || []).filter(e =>
+      (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
+      normAg(e.age_group) === normAg(relayEa.age_group) && e.gender?.toLowerCase() === relayEa.gender?.toLowerCase()
+    );
+    const sameAge = normAg(s.age_group) === normAg(relayEa.age_group);
+    const stripped = stripActName(r.activity_name);
+    return srcEas.some(te => r.event_activity_id === te.id || (sameAge && stripped === te.name.toLowerCase()));
+  };
+
   const rankedAthletes = React.useMemo(() => {
     if (!selectedEa) return [];
     // Relay: source from sprint results for same age_group/gender instead of own results
@@ -3191,16 +3207,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
       : selectedEa.higher_is_better !== false;
     const resultPool = (results || []).filter(r => {
       const s = studentMap[r.student_id];
-      if (isRelay) {
-        // Pull from any track event for same age_group/gender
-        if (!s || s.age_group !== selectedEa.age_group || s.gender !== selectedEa.gender) return false;
-        const srcEas = (eventActivities || []).filter(e =>
-          (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
-          e.age_group === selectedEa.age_group && e.gender === selectedEa.gender
-        );
-        const stripped = stripActName(r.activity_name);
-        return srcEas.some(te => r.event_activity_id === te.id || stripped === te.name.toLowerCase());
-      }
+      if (isRelay) return isRelaySource(r, s, selectedEa);
       if (r.event_activity_id === selectedEa.id) return true;
       const stripped = stripActName(r.activity_name);
       return stripped === selectedEa.name.toLowerCase() && s?.age_group === selectedEa.age_group && s?.gender === selectedEa.gender;
@@ -3265,8 +3272,6 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
           <button onClick={() => {
             // Compute ranked + selected athletes for every EA
             const escHtml = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            // Normalize age_group for comparison — strips "(Open)" suffix so "U14 (Open)" matches students' "U14"
-            const normAg = ag => (ag||'').replace(/\s*\([^)]*\)\s*$/g, '').trim().toLowerCase();
             // Build eaAthletes: eaId -> [{student, result_value, unit, selected, houseRank}]
             const eaAthletes = {};
             (eventActivities || []).forEach(ea => {
@@ -3275,15 +3280,7 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
               const ranked = (results || [])
                 .filter(r => {
                   const s = studentMap[r.student_id];
-                  if (isRelay) {
-                    if (!s || normAg(s.age_group) !== normAg(ea.age_group) || s.gender?.toLowerCase() !== ea.gender?.toLowerCase()) return false;
-                    const srcEas = (eventActivities||[]).filter(e =>
-                      (e.activity_type === 'track' || (!e.activity_type && e.unit === 'seconds')) &&
-                      normAg(e.age_group) === normAg(ea.age_group) && e.gender?.toLowerCase() === ea.gender?.toLowerCase()
-                    );
-                    const strippedR = stripActName(r.activity_name);
-                    return srcEas.some(te => r.event_activity_id === te.id || strippedR === te.name.toLowerCase());
-                  }
+                  if (isRelay) return isRelaySource(r, s, ea);
                   const strippedR = stripActName(r.activity_name);
                   return r.event_activity_id === ea.id || (strippedR === ea.name.toLowerCase() && normAg(s?.age_group) === normAg(ea.age_group) && s?.gender?.toLowerCase() === ea.gender?.toLowerCase());
                 })
