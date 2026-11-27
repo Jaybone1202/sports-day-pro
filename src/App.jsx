@@ -3357,22 +3357,21 @@ const AthletesListModule = ({ user, showToast, onBack }) => {
                   for (const e of easForName) { const found = eaAthletes[e.id]?.find(r => r.student_id === student.id); if (found) { entry = found; ea = e; break; } }
                   if (!entry) return `<td class="tick na">—</td>`;
                   const ag = abbrevAg(ea.age_group);
-                  const val = entry.result_value !== null && entry.result_value !== undefined ? `${entry.result_value}${entry.unit||ea.unit?' '+(entry.unit||ea.unit):''}` : '—';
                   const isRelayEaCell = /relay/i.test(ea.name || '');
                   const isTrackEa = !isRelayEaCell && (ea.activity_type === 'track' || (!ea.activity_type && ea.unit === 'seconds'));
                   const isReserve = !isTrackEa && !isRelayEaCell && ea.participants_per_house && entry.houseRank === ea.participants_per_house + 1;
                   if (isTrackEa && entry.heat) {
                     const cls2 = entry.heat === 1 ? 'heat champ' : 'heat other';
-                    return `<td class="tick ${cls2}"><div>H${entry.heat}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                    return `<td class="tick ${cls2}"><div>H${entry.heat}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div></td>`;
                   }
                   if (isReserve) {
                     const hRes = (entry.student?.house||'').toUpperCase();
-                    return `<td class="tick reserve"><div>${hRes} RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                    return `<td class="tick reserve"><div>${hRes} RES${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div></td>`;
                   }
                   if (!entry.selected) return `<td class="tick na">—</td>`;
                   const h2 = (entry.student?.house||'').toUpperCase();
                   const houseLabel = `${h2} #${entry.houseRank}`;
-                  return `<td class="tick done"><div>${houseLabel}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div><div style="font-size:9px;font-weight:400">${escHtml(val)}</div></td>`;
+                  return `<td class="tick done"><div>${houseLabel}${ag?' <span style="font-size:8px;opacity:0.75">'+ag+'</span>':''}</div></td>`;
                 }).join('');
                 return `<tr><td class="name-col">${escHtml(student.last_name)}, ${escHtml(student.first_name)}</td><td class="grp-col" style="text-align:center;color:#64748b;font-size:10px">${escHtml(student.house||'—')}</td>${eventCells}</tr>`;
               }).filter(Boolean).join('');
