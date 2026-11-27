@@ -5152,7 +5152,11 @@ const StaffScoringView = ({ user, showToast, activity, houseColors, schoolRecord
   const isPlacingMode = !isTrial && activity.scoringType === 'placing';
   const isTrack = isTrial ? activity.filters.unit === 'seconds' : activity.type === 'track';
   const isHybridTrack = !isTrial && isTrack && !isPlacingMode; // track events support optional position fallback per student
-  const unitLabel = isPlacingMode ? 'Place' : isTrial ? (activity.filters.unit === 'seconds' ? 'Secs' : activity.filters.unit === 'cm' ? 'cm' : 'Meters') : (isTrack ? 'Secs' : 'Meters');
+  const labelForUnit = u => u === 'seconds' ? 'Secs' : u === 'minutes' ? 'Mins' : u === 'cm' ? 'cm' : 'Meters';
+  const unitLabel = isPlacingMode ? 'Place'
+    : isTrial ? labelForUnit(activity.filters.unit)
+    : isTrack ? 'Secs'
+    : labelForUnit(activity.unit || (activity.type === 'long_distance' ? 'minutes' : 'm'));
   const HYBRID_POSITION_OFFSET = 9000; // values >= this are position-only entries, not times
   const attUnit = activity.unit || (isTrack ? 'seconds' : 'm');
 
